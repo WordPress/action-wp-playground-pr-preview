@@ -29402,6 +29402,7 @@ async function run() {
         // Get org and repo names from context
         const { eventName } = github_1.context;
         // Only run on pull_request_target events
+        console.log(`Event name: ${eventName}`);
         if (eventName !== 'pull_request_target') {
             return;
         }

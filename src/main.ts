@@ -12,6 +12,7 @@ export async function run() {
 		const { eventName } = context;
 
 		// Only run on pull_request_target events
+		console.log(`Event name: ${eventName}`);
 		if (eventName !== 'pull_request_target') {
 			return;
 		}
