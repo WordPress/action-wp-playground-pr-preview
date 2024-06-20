@@ -8,10 +8,10 @@
 		"rules": {
 			"recommended": true
 		},
-		"ignore": ["node_modules", ".github", ".devcontainer", "dist"]
+		"ignore": ["node_modules", ".github", ".devcontainer", "dist", "coverage"]
 	},
 	"formatter": {
-		"ignore": ["node_modules", ".github", ".devcontainer", "dist"]
+		"ignore": ["node_modules", ".github", ".devcontainer", "dist", "coverage"]
 	},
 	"javascript": {
 		"formatter": {
