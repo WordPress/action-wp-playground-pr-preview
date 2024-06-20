@@ -1,11 +1,13 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
-import { getInput } from '@actions/core';
+import * as path from 'node:path';
+import { debug, getInput } from '@actions/core';
 import { detectThemeChanges } from '../src/get-changed-themes';
 
-jest.mock('@actions/core');
 jest.mock('node:child_process');
 jest.mock('node:fs');
+jest.mock('node:path');
+jest.mock('@actions/core');
 
 const mockGetInput = getInput as jest.MockedFunction<typeof getInput>;
 const mockExecSync = execSync as jest.MockedFunction<typeof execSync>;
@@ -15,11 +17,18 @@ const mockFsExistsSync = fs.existsSync as jest.MockedFunction<
 const mockFsReadFileSync = fs.readFileSync as jest.MockedFunction<
 	typeof fs.readFileSync
 >;
+const mockDebug = debug as jest.MockedFunction<typeof debug>;
 
 describe('detectThemeChanges', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
-		mockGetInput.mockReturnValue('origin/main'); // Mocking getInput to return a value for 'ref'
+		mockGetInput.mockImplementation((name: string) => {
+			if (name === 'ref') {
+				return 'HEAD';
+			}
+			if (name === 'base-branch') return 'main';
+			return '';
+		});
 	});
 
 	it('should return no theme changes when no themes are modified', () => {
@@ -31,10 +40,17 @@ describe('detectThemeChanges', () => {
 		expect(result).toEqual({ hasThemeChanges: false, changedThemes: {} });
 
 		expect(mockGetInput).toHaveBeenCalledWith('ref', { required: true });
+		expect(mockGetInput).toHaveBeenCalledWith('base-branch', {
+			required: true,
+		});
+		expect(mockExecSync).toHaveBeenCalledWith('git fetch origin main', {
+			encoding: 'utf-8',
+		});
 		expect(mockExecSync).toHaveBeenCalledWith(
 			'git diff --name-only HEAD origin/main',
 			{ encoding: 'utf-8' },
 		);
+		expect(mockDebug).toHaveBeenCalledWith('No theme changes detected');
 	});
 
 	it('should return theme changes when themes are modified', () => {
@@ -65,6 +81,12 @@ describe('detectThemeChanges', () => {
 		});
 
 		expect(mockGetInput).toHaveBeenCalledWith('ref', { required: true });
+		expect(mockGetInput).toHaveBeenCalledWith('base-branch', {
+			required: true,
+		});
+		expect(mockExecSync).toHaveBeenCalledWith('git fetch origin main', {
+			encoding: 'utf-8',
+		});
 		expect(mockExecSync).toHaveBeenCalledWith(
 			'git diff --name-only HEAD origin/main',
 			{ encoding: 'utf-8' },
@@ -79,5 +101,39 @@ describe('detectThemeChanges', () => {
 			'theme2/style.css',
 			'utf-8',
 		);
+		expect(mockDebug).toHaveBeenCalledWith('Theme changes detected');
+	});
+
+	it('should correctly handle templates with no value', () => {
+		mockExecSync.mockReturnValue('theme3/style.css');
+		mockFsExistsSync.mockReturnValue(true);
+		mockFsReadFileSync.mockReturnValue('Theme Name: Theme3\nTemplate: \n');
+
+		const result = detectThemeChanges();
+
+		expect(result).toEqual({
+			hasThemeChanges: true,
+			changedThemes: {
+				Theme3: 'theme3',
+			},
+		});
+
+		expect(mockGetInput).toHaveBeenCalledWith('ref', { required: true });
+		expect(mockGetInput).toHaveBeenCalledWith('base-branch', {
+			required: true,
+		});
+		expect(mockExecSync).toHaveBeenCalledWith('git fetch origin main', {
+			encoding: 'utf-8',
+		});
+		expect(mockExecSync).toHaveBeenCalledWith(
+			'git diff --name-only HEAD origin/main',
+			{ encoding: 'utf-8' },
+		);
+		expect(mockFsExistsSync).toHaveBeenCalledWith('theme3/style.css');
+		expect(mockFsReadFileSync).toHaveBeenCalledWith(
+			'theme3/style.css',
+			'utf-8',
+		);
+		expect(mockDebug).toHaveBeenCalledWith('Theme changes detected');
 	});
 });

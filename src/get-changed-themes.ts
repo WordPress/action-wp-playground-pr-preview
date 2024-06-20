@@ -36,10 +36,10 @@ function getThemeDetails(dirName: string): {
 	const content = fs.readFileSync(styleCssPath, 'utf-8');
 
 	const themeNameMatch = content.match(/^Theme Name:\s*(.+)$/m);
-	const parentThemeMatch = content.match(/^Template:\s*(\S+)$/m);
+	const parentThemeMatch = content.match(/^Template:\s*(\S.*)?$/m);
 
 	const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
-	const parentTheme = parentThemeMatch ? parentThemeMatch[1].trim() : null;
+	const parentTheme = parentThemeMatch?.[1] ? parentThemeMatch[1].trim() : null;
 
 	debug(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
 	return { themeName, parentTheme };
@@ -55,11 +55,13 @@ function getUniqueDirs(changedFiles: string[]): Record<string, string> {
 			const styleCssPath = path.join(dirName, 'style.css');
 			if (fs.existsSync(styleCssPath)) {
 				const { themeName, parentTheme } = getThemeDetails(dirName);
-				const finalThemeName = parentTheme
-					? `${themeName}_childof_${parentTheme}`
-					: themeName;
-				uniqueDirs[finalThemeName] = dirName;
-				debug(`Added ${finalThemeName}: ${dirName} to uniqueDirs`);
+				if (themeName) {
+					const finalThemeName = parentTheme
+						? `${themeName}_childof_${parentTheme}`
+						: themeName;
+					uniqueDirs[finalThemeName] = dirName;
+					debug(`Added ${finalThemeName}: ${dirName} to uniqueDirs`);
+				}
 				break;
 			}
 			dirName = path.dirname(dirName);
