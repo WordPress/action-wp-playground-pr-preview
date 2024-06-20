@@ -1,14 +1,15 @@
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import { execSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { getInput } from '@actions/core';
 
 function runCommand(command: string): string {
 	return execSync(command, { encoding: 'utf-8' }).trim();
 }
 
 function getChangedFiles(): string[] {
-	runCommand('git fetch origin');
-	const changedFiles = runCommand('git diff --name-only HEAD origin/trunk');
+	const ref = getInput('ref', { required: true });
+	const changedFiles = runCommand(`git diff --name-only HEAD ${ref}`);
 	return changedFiles.split('\n').filter((file) => file.trim() !== '');
 }
 

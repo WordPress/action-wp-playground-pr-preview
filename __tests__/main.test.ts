@@ -63,14 +63,6 @@ describe('run', () => {
 
 		await run();
 
-		expect(mockExec).toHaveBeenCalledWith('git', [
-			'clone',
-			'--depth=1',
-			'--branch',
-			'trunk',
-			'https://github.com/fake-org/fake-repo.git',
-		]);
-
 		expect(mockCreatePreviewLinksComment).toHaveBeenCalledWith(
 			mockOctokit,
 			context,
@@ -85,14 +77,6 @@ describe('run', () => {
 		});
 
 		await run();
-
-		expect(mockExec).toHaveBeenCalledWith('git', [
-			'clone',
-			'--depth=1',
-			'--branch',
-			'trunk',
-			'https://github.com/fake-org/fake-repo.git',
-		]);
 
 		expect(mockCreatePreviewLinksComment).not.toHaveBeenCalled();
 	});

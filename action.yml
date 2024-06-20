@@ -4,6 +4,9 @@ inputs:
   github-token:
     description: 'GitHub token'
     required: true
+  ref: 
+    description: 'git ref SHA'
+    required: true
 runs:
   using: 'node20'
   main: 'dist/index.js'

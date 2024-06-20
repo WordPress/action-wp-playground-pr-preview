@@ -1,0 +1,25 @@
+name: Preview Theme Changes
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+permissions:
+  pull-requests: write
+
+jobs:
+  create-preview-links:
+    runs-on: ubuntu-latest
+    outputs:
+      HAS_THEME_CHANGES: ${{ steps.check-for-changes.outputs.HAS_THEME_CHANGES }}
+      CHANGED_THEMES: ${{ steps.check-for-changes.outputs.CHANGED_THEMES }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Create Preview Links
+        uses: ./
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.head.sha }}

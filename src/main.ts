@@ -1,5 +1,4 @@
 import { getInput, setFailed } from '@actions/core';
-import { exec } from '@actions/exec';
 import { context, getOctokit } from '@actions/github';
 import createPreviewLinksComment from './create-preview-links';
 import { detectThemeChanges } from './get-changed-themes';
@@ -10,23 +9,12 @@ export async function run() {
 		const octokit = getOctokit(token);
 
 		// Get org and repo names from context
-		const { eventName, repo } = context;
-		const organization = repo.owner;
-		const respository = repo.repo;
+		const { eventName } = context;
 
 		// Only run on pull_request_target events
 		if (eventName !== 'pull_request_target') {
 			return;
 		}
-
-		// Clone the repository
-		await exec('git', [
-			'clone',
-			'--depth=1',
-			'--branch',
-			'trunk',
-			`https://github.com/${organization}/${respository}.git`,
-		]);
 
 		// Get the changed themes
 		const { hasThemeChanges, changedThemes } = detectThemeChanges();
