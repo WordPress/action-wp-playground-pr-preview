@@ -29238,7 +29238,7 @@ async function createPreviewLinksComment(github, context, changedThemeSlugs) {
     const previewLinks = changedThemes
         .map((theme) => {
         const [themeName, themeDir] = theme.split(':');
-        const themeSlug = themeDir.split('/')[0];
+        const themeSlug = themeDir.split('/')[0].trim();
         const parentThemeSlug = themeName.split('_childof_')[1];
         return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
     })
