@@ -29352,8 +29352,8 @@ function getThemeDetails(dirName) {
     const styleCssPath = path.join(dirName, 'style.css');
     (0, core_1.debug)(`Reading ${styleCssPath}`);
     const content = fs.readFileSync(styleCssPath, 'utf-8');
-    const themeNameMatch = content.match(/Theme Name:\s*(.*)/);
-    const parentThemeMatch = content.match(/Template:\s*(.*)/);
+    const themeNameMatch = content.match(/^Theme Name:\s*(.+)$/m);
+    const parentThemeMatch = content.match(/^Template:\s*(.+)$/m);
     const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
     const parentTheme = parentThemeMatch ? parentThemeMatch[1].trim() : null;
     (0, core_1.debug)(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
