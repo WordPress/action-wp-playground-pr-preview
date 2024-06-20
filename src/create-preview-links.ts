@@ -66,7 +66,7 @@ export default async function createPreviewLinksComment(
 	const previewLinks = changedThemes
 		.map((theme) => {
 			const [themeName, themeDir] = theme.split(':');
-			const themeSlug = themeDir.split('/')[0];
+			const themeSlug = themeDir.split('/')[0].trim();
 			const parentThemeSlug = themeName.split('_childof_')[1];
 			return `- [Preview changes for **${
 				themeName.split('_childof_')[0]
