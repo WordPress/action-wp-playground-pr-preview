@@ -29193,19 +29193,14 @@ function wrappy (fn, cb) {
 /***/ }),
 
 /***/ 6444:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-/*
- * This function creates a WordPress Playground blueprint JSON string for a theme.
- *
- * @param {string} themeSlug - The slug of the theme to create a blueprint for.
- * @param {string} branch - The branch where the theme changes are located.
- * @returns {string} - A JSON string representing the blueprint.
- */
+const core_1 = __nccwpck_require__(2186);
 function createBlueprint(themeSlug, branch) {
+    (0, core_1.debug)(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
     const template = {
         steps: [
             {
@@ -29226,22 +29221,20 @@ function createBlueprint(themeSlug, branch) {
             },
         ],
     };
-    return JSON.stringify(template);
+    const blueprint = JSON.stringify(template);
+    (0, core_1.debug)(`Blueprint created: ${blueprint}`);
+    return blueprint;
 }
-/*
- * This function creates a comment on a PR with preview links for the changed themes.
- * It is used by `preview-theme` workflow.
- *
- * @param {ReturnType<typeof getOctokit>} github - An authenticated instance of the GitHub API.
- * @param {Context} context - The context of the event that triggered the action.
- * @param {string} changedThemeSlugs - A comma-separated string of theme slugs that have changed.
- */
 async function createPreviewLinksComment(github, context, changedThemeSlugs) {
+    (0, core_1.debug)('Starting createPreviewLinksComment');
     const pullRequest = context.payload?.pull_request;
     if (!pullRequest) {
+        (0, core_1.debug)('No pull request found in context payload');
         throw new Error('No pull request found in context payload');
     }
+    (0, core_1.debug)(`Pull request found: #${pullRequest.number}`);
     const changedThemes = changedThemeSlugs.split(',');
+    (0, core_1.debug)(`Changed themes: ${changedThemes.join(', ')}`);
     const previewLinks = changedThemes
         .map((theme) => {
         const [themeName, themeDir] = theme.split(':');
@@ -29250,7 +29243,9 @@ async function createPreviewLinksComment(github, context, changedThemeSlugs) {
         return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
     })
         .join('\n');
+    (0, core_1.debug)(`Preview links generated: ${previewLinks}`);
     const includesChildThemes = previewLinks.includes('child of');
+    (0, core_1.debug)(`Includes child themes: ${includesChildThemes}`);
     const comment = `
 I've detected changes to the following themes in this PR: ${changedThemes
         .map((changedTheme) => changedTheme.split(':')[0].split('_childof_')[0])
@@ -29269,7 +29264,7 @@ ${includesChildThemes
         owner: context.repo.owner,
         repo: context.repo.repo,
     };
-    // Check if a comment already exists and update it if it does
+    (0, core_1.debug)('Checking for existing comments');
     const { data: comments } = await github.rest.issues.listComments({
         issue_number: pullRequest.number,
         ...repoData,
@@ -29281,13 +29276,14 @@ ${includesChildThemes
         ...repoData,
     };
     if (existingComment) {
+        (0, core_1.debug)(`Updating existing comment: ${existingComment.id}`);
         await github.rest.issues.updateComment({
             comment_id: existingComment.id,
             ...commentObject,
         });
         return;
     }
-    // Create a new comment if one doesn't exist
+    (0, core_1.debug)('Creating new comment');
     await github.rest.issues.createComment({
         issue_number: pullRequest.number,
         ...commentObject,
@@ -29333,23 +29329,35 @@ const fs = __importStar(__nccwpck_require__(7561));
 const path = __importStar(__nccwpck_require__(9411));
 const core_1 = __nccwpck_require__(2186);
 function runCommand(command) {
-    return (0, node_child_process_1.execSync)(command, { encoding: 'utf-8' }).trim();
+    (0, core_1.debug)(`Running command: ${command}`);
+    const result = (0, node_child_process_1.execSync)(command, { encoding: 'utf-8' }).trim();
+    (0, core_1.debug)(`Command result: ${result}`);
+    return result;
 }
 function getChangedFiles() {
     const ref = (0, core_1.getInput)('ref', { required: true });
+    (0, core_1.debug)(`Getting changed files for ref: ${ref}`);
     const changedFiles = runCommand(`git diff --name-only HEAD ${ref}`);
-    return changedFiles.split('\n').filter((file) => file.trim() !== '');
+    const filesArray = changedFiles
+        .split('\n')
+        .filter((file) => file.trim() !== '');
+    (0, core_1.debug)(`Changed files: ${filesArray.join(', ')}`);
+    return filesArray;
 }
 function getThemeDetails(dirName) {
+    (0, core_1.debug)(`Getting theme details for directory: ${dirName}`);
     const styleCssPath = path.join(dirName, 'style.css');
+    (0, core_1.debug)(`Reading ${styleCssPath}`);
     const content = fs.readFileSync(styleCssPath, 'utf-8');
     const themeNameMatch = content.match(/Theme Name:\s*(.*)/);
     const parentThemeMatch = content.match(/Template:\s*(.*)/);
     const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
     const parentTheme = parentThemeMatch ? parentThemeMatch[1].trim() : null;
+    (0, core_1.debug)(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
     return { themeName, parentTheme };
 }
 function getUniqueDirs(changedFiles) {
+    (0, core_1.debug)('Getting unique directories from changed files');
     const uniqueDirs = {};
     for (const file of changedFiles) {
         let dirName = path.dirname(file);
@@ -29361,6 +29369,7 @@ function getUniqueDirs(changedFiles) {
                     ? `${themeName}_childof_${parentTheme}`
                     : themeName;
                 uniqueDirs[finalThemeName] = dirName;
+                (0, core_1.debug)(`Added ${finalThemeName}: ${dirName} to uniqueDirs`);
                 break;
             }
             dirName = path.dirname(dirName);
@@ -29369,11 +29378,14 @@ function getUniqueDirs(changedFiles) {
     return uniqueDirs;
 }
 function detectThemeChanges() {
+    (0, core_1.debug)('Detecting theme changes');
     const changedFiles = getChangedFiles();
     const uniqueDirs = getUniqueDirs(changedFiles);
     if (Object.keys(uniqueDirs).length === 0) {
+        (0, core_1.debug)('No theme changes detected');
         return { hasThemeChanges: false, changedThemes: {} };
     }
+    (0, core_1.debug)('Theme changes detected');
     return { hasThemeChanges: true, changedThemes: uniqueDirs };
 }
 exports.detectThemeChanges = detectThemeChanges;
@@ -29397,27 +29409,38 @@ const create_preview_links_1 = __importDefault(__nccwpck_require__(6444));
 const get_changed_themes_1 = __nccwpck_require__(9254);
 async function run() {
     try {
+        (0, core_1.debug)('Starting action execution');
         const token = (0, core_1.getInput)('github-token', { required: true });
+        (0, core_1.debug)('GitHub token obtained');
         const octokit = (0, github_1.getOctokit)(token);
+        (0, core_1.debug)('Octokit client initialized');
         // Get org and repo names from context
         const { eventName } = github_1.context;
+        (0, core_1.debug)(`Event name: ${eventName}`);
         // Only run on pull_request_target events
-        console.log(`Event name: ${eventName}`);
         if (eventName !== 'pull_request_target') {
+            (0, core_1.debug)('Event is not pull_request_target, exiting');
             return;
         }
         // Get the changed themes
+        (0, core_1.debug)('Detecting theme changes');
         const { hasThemeChanges, changedThemes } = (0, get_changed_themes_1.detectThemeChanges)();
+        (0, core_1.debug)(`Theme changes detected: ${hasThemeChanges}`);
         if (!hasThemeChanges) {
+            (0, core_1.debug)('No theme changes, exiting');
             return;
         }
         const changedThemeSlugs = Object.keys(changedThemes).join(',');
+        (0, core_1.debug)(`Changed theme slugs: ${changedThemeSlugs}`);
         await (0, create_preview_links_1.default)(octokit, github_1.context, changedThemeSlugs);
+        (0, core_1.debug)('Preview links comment created');
     }
     catch (error) {
         if (error instanceof Error) {
+            (0, core_1.debug)(`Error occurred: ${error.message}`);
             return (0, core_1.setFailed)(error.message);
         }
+        (0, core_1.debug)('An unexpected error occurred');
         return (0, core_1.setFailed)('An unexpected error occurred');
     }
 }
