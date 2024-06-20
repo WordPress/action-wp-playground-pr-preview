@@ -69,25 +69,19 @@
 							"fontFamily": "IBM Plex Mono",
 							"fontStyle": "normal",
 							"fontWeight": "400",
-							"src": [
-								"file:./assets/fonts/ibm-plex-mono_regular.ttf"
-							]
+							"src": ["file:./assets/fonts/ibm-plex-mono_regular.ttf"]
 						},
 						{
 							"fontFamily": "IBM Plex Mono",
 							"fontStyle": "italic",
 							"fontWeight": "400",
-							"src": [
-								"file:./assets/fonts/ibm-plex-mono_italic.ttf"
-							]
+							"src": ["file:./assets/fonts/ibm-plex-mono_italic.ttf"]
 						},
 						{
 							"fontFamily": "IBM Plex Mono",
 							"fontStyle": "italic",
 							"fontWeight": "600",
-							"src": [
-								"file:./assets/fonts/ibm-plex-mono_600italic.ttf"
-							]
+							"src": ["file:./assets/fonts/ibm-plex-mono_600italic.ttf"]
 						}
 					],
 					"fontFamily": "IBM Plex Mono",
