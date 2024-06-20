@@ -48,13 +48,13 @@ describe('createPreviewLinksComment', () => {
 		await createPreviewLinksComment(mockGithub, mockContext, changedThemeSlugs);
 
 		expect(mockGithub.rest.issues.listComments).toHaveBeenCalledWith({
-			issue_number: mockContext.payload!.pull_request!.number,
+			issue_number: mockContext.payload?.pull_request?.number,
 			owner: mockContext.repo.owner,
 			repo: mockContext.repo.repo,
 		});
 
 		expect(mockGithub.rest.issues.createComment).toHaveBeenCalledWith({
-			issue_number: mockContext.payload!.pull_request!.number,
+			issue_number: mockContext.payload?.pull_request?.number,
 			owner: mockContext.repo.owner,
 			repo: mockContext.repo.repo,
 			body: expect.stringContaining('### Preview changes\n'),
@@ -81,7 +81,7 @@ describe('createPreviewLinksComment', () => {
 		await createPreviewLinksComment(mockGithub, mockContext, changedThemeSlugs);
 
 		expect(mockGithub.rest.issues.listComments).toHaveBeenCalledWith({
-			issue_number: mockContext.payload!.pull_request!.number,
+			issue_number: mockContext.payload?.pull_request?.number,
 			owner: mockContext.repo.owner,
 			repo: mockContext.repo.repo,
 		});
@@ -113,7 +113,7 @@ I will update this comment with the latest preview links as you push more change
 `;
 
 		expect(mockGithub.rest.issues.createComment).toHaveBeenCalledWith({
-			issue_number: mockContext.payload!.pull_request!.number,
+			issue_number: mockContext.payload?.pull_request?.number,
 			owner: mockContext.repo.owner,
 			repo: mockContext.repo.repo,
 			body: `### Preview changes\n${expectedBody}`,

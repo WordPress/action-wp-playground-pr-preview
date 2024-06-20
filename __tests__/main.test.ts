@@ -1,92 +1,122 @@
-/**
- * Unit tests for the action's main functionality, src/main.ts
- *
- * These should be run as if the action was called from a workflow.
- * Specifically, the inputs listed in `action.yml` should be set as environment
- * variables following the pattern `INPUT_<INPUT_NAME>`.
- */
+import { getInput, setFailed } from '@actions/core';
+import { exec } from '@actions/exec';
+import { context, getOctokit } from '@actions/github';
+import createPreviewLinksComment from '../src/create-preview-links';
+import { detectThemeChanges } from '../src/get-changed-themes';
+import { run } from '../src/main';
 
-import * as core from '@actions/core';
-import * as main from '../src/main';
+jest.mock('@actions/core');
+jest.mock('@actions/exec');
+jest.mock('@actions/github');
+jest.mock('../src/create-preview-links');
+jest.mock('../src/get-changed-themes');
 
-// Mock the action's main function
-const runMock = jest.spyOn(main, 'run');
+const mockGetInput = getInput as jest.MockedFunction<typeof getInput>;
+const mockSetFailed = setFailed as jest.MockedFunction<typeof setFailed>;
+const mockExec = exec as jest.MockedFunction<typeof exec>;
+const mockGetOctokit = getOctokit as jest.MockedFunction<typeof getOctokit>;
+const mockDetectThemeChanges = detectThemeChanges as jest.MockedFunction<
+	typeof detectThemeChanges
+>;
+const mockCreatePreviewLinksComment =
+	createPreviewLinksComment as jest.MockedFunction<
+		typeof createPreviewLinksComment
+	>;
 
-// Other utilities
-const timeRegex = /^\d{2}:\d{2}:\d{2}/;
+const mockOctokit = {
+	rest: {
+		issues: {
+			listComments: jest.fn(),
+			updateComment: jest.fn(),
+			createComment: jest.fn(),
+		},
+	},
+	request: jest.fn(),
+	graphql: jest.fn(),
+	log: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+	hook: { before: jest.fn(), error: jest.fn(), wrap: jest.fn() },
+	auth: jest.fn(),
+} as unknown as ReturnType<typeof getOctokit>;
 
-// Mock the GitHub Actions core library
-let debugMock: jest.SpiedFunction<typeof core.debug>;
-let errorMock: jest.SpiedFunction<typeof core.error>;
-let getInputMock: jest.SpiedFunction<typeof core.getInput>;
-let setFailedMock: jest.SpiedFunction<typeof core.setFailed>;
-let setOutputMock: jest.SpiedFunction<typeof core.setOutput>;
-
-describe('action', () => {
+describe('run', () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
+		mockGetInput.mockReturnValue('fake-token');
+		mockGetOctokit.mockReturnValue(mockOctokit);
 
-		debugMock = jest.spyOn(core, 'debug').mockImplementation();
-		errorMock = jest.spyOn(core, 'error').mockImplementation();
-		getInputMock = jest.spyOn(core, 'getInput').mockImplementation();
-		setFailedMock = jest.spyOn(core, 'setFailed').mockImplementation();
-		setOutputMock = jest.spyOn(core, 'setOutput').mockImplementation();
+		// Use Object.defineProperty to set read-only properties
+		Object.defineProperty(context, 'repo', {
+			value: { owner: 'fake-org', repo: 'fake-repo' },
+			writable: true,
+		});
+		Object.defineProperty(context, 'eventName', {
+			value: 'pull_request_target',
+			writable: true,
+		});
 	});
 
-	it('sets the time output', async () => {
-		// Set the action's inputs as return values from core.getInput()
-		getInputMock.mockImplementation((name) => {
-			switch (name) {
-				case 'milliseconds':
-					return '500';
-				default:
-					return '';
-			}
+	it('should clone the repository and create a comment when themes have changed', async () => {
+		mockDetectThemeChanges.mockReturnValue({
+			hasThemeChanges: true,
+			changedThemes: { theme1: 'dir1', theme2_childof_parentTheme: 'dir2' },
 		});
 
-		await main.run();
-		expect(runMock).toHaveReturned();
+		await run();
 
-		// Verify that all of the core library functions were called correctly
-		expect(debugMock).toHaveBeenNthCalledWith(
-			1,
-			'Waiting 500 milliseconds ...',
+		expect(mockExec).toHaveBeenCalledWith('git', [
+			'clone',
+			'--depth=1',
+			'--branch',
+			'trunk',
+			'https://github.com/fake-org/fake-repo.git',
+		]);
+
+		expect(mockCreatePreviewLinksComment).toHaveBeenCalledWith(
+			mockOctokit,
+			context,
+			'theme1,theme2_childof_parentTheme',
 		);
-		expect(debugMock).toHaveBeenNthCalledWith(
-			2,
-			expect.stringMatching(timeRegex),
-		);
-		expect(debugMock).toHaveBeenNthCalledWith(
-			3,
-			expect.stringMatching(timeRegex),
-		);
-		expect(setOutputMock).toHaveBeenNthCalledWith(
-			1,
-			'time',
-			expect.stringMatching(timeRegex),
-		);
-		expect(errorMock).not.toHaveBeenCalled();
 	});
 
-	it('sets a failed status', async () => {
-		// Set the action's inputs as return values from core.getInput()
-		getInputMock.mockImplementation((name) => {
-			switch (name) {
-				case 'milliseconds':
-					return 'this is not a number';
-				default:
-					return '';
-			}
+	it('should not create a comment when there are no theme changes', async () => {
+		mockDetectThemeChanges.mockReturnValue({
+			hasThemeChanges: false,
+			changedThemes: {},
 		});
 
-		await main.run();
-		expect(runMock).toHaveReturned();
+		await run();
 
-		// Verify that all of the core library functions were called correctly
-		expect(setFailedMock).toHaveBeenNthCalledWith(
-			1,
-			'milliseconds not a number',
-		);
-		expect(errorMock).not.toHaveBeenCalled();
+		expect(mockExec).toHaveBeenCalledWith('git', [
+			'clone',
+			'--depth=1',
+			'--branch',
+			'trunk',
+			'https://github.com/fake-org/fake-repo.git',
+		]);
+
+		expect(mockCreatePreviewLinksComment).not.toHaveBeenCalled();
+	});
+
+	it('should handle errors correctly', async () => {
+		const error = new Error('Something went wrong');
+		mockGetInput.mockImplementation(() => {
+			throw error;
+		});
+
+		await run();
+
+		expect(mockSetFailed).toHaveBeenCalledWith('Something went wrong');
+	});
+
+	it('should exit early if event is not pull_request_target', async () => {
+		Object.defineProperty(context, 'eventName', {
+			value: 'push',
+			writable: true,
+		});
+
+		await run();
+
+		expect(mockExec).not.toHaveBeenCalled();
+		expect(mockCreatePreviewLinksComment).not.toHaveBeenCalled();
 	});
 });

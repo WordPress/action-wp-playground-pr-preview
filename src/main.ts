@@ -10,8 +10,14 @@ export async function run() {
 		const octokit = getOctokit(token);
 
 		// Get org and repo names from context
-		const org = context.repo.owner;
-		const repo = context.repo.repo;
+		const { eventName, repo } = context;
+		const organization = repo.owner;
+		const respository = repo.repo;
+
+		// Only run on pull_request_target events
+		if (eventName !== 'pull_request_target') {
+			return;
+		}
 
 		// Clone the repository
 		await exec('git', [
@@ -19,7 +25,7 @@ export async function run() {
 			'--depth=1',
 			'--branch',
 			'trunk',
-			`https://github.com/${org}/${repo}.git`,
+			`https://github.com/${organization}/${respository}.git`,
 		]);
 
 		// Get the changed themes
