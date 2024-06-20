@@ -29336,8 +29336,11 @@ function runCommand(command) {
 }
 function getChangedFiles() {
     const ref = (0, core_1.getInput)('ref', { required: true });
+    const baseBranch = (0, core_1.getInput)('base-branch', { required: true });
     (0, core_1.debug)(`Getting changed files for ref: ${ref}`);
-    const changedFiles = runCommand(`git diff --name-only HEAD ${ref}`);
+    // Fetch the base branch
+    runCommand(`git fetch origin ${baseBranch}`);
+    const changedFiles = runCommand(`git diff --name-only ${ref} origin/${baseBranch}`);
     const filesArray = changedFiles
         .split('\n')
         .filter((file) => file.trim() !== '');
