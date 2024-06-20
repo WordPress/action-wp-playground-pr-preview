@@ -1,22 +1,22 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.8.2/schema.json",
-  "organizeImports": {
-    "enabled": true
-  },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true
-    },
-    "ignore": ["node_modules", ".github", ".devcontainer", "dist"]
-  },
-  "formatter": {
-    "ignore": ["node_modules", ".github", ".devcontainer", "dist"]
-  },
-  "javascript": {
-    "formatter": {
-      "enabled": true,
-      "quoteStyle": "single"
-    }
-  }
+	"$schema": "https://biomejs.dev/schemas/1.8.2/schema.json",
+	"organizeImports": {
+		"enabled": true
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"recommended": true
+		},
+		"ignore": ["node_modules", ".github", ".devcontainer", "dist"]
+	},
+	"formatter": {
+		"ignore": ["node_modules", ".github", ".devcontainer", "dist"]
+	},
+	"javascript": {
+		"formatter": {
+			"enabled": true,
+			"quoteStyle": "single"
+		}
+	}
 }
