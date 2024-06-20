@@ -1,6 +1,6 @@
 import { getInput, setFailed } from '@actions/core';
-import { context, getOctokit } from '@actions/github';
 import { exec } from '@actions/exec';
+import { context, getOctokit } from '@actions/github';
 
 export async function run() {
 	try {
