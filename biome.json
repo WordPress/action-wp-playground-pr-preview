@@ -18,5 +18,8 @@
 			"enabled": true,
 			"quoteStyle": "single"
 		}
+	},
+	"files": {
+		"maxSize": 4999999
 	}
 }

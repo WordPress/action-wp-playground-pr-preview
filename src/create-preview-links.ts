@@ -1,3 +1,4 @@
+import { debug } from '@actions/core';
 import type { getOctokit } from '@actions/github';
 import type { Context } from '@actions/github/lib/context';
 
@@ -18,14 +19,8 @@ interface Template {
 	steps: Step[];
 }
 
-/*
- * This function creates a WordPress Playground blueprint JSON string for a theme.
- *
- * @param {string} themeSlug - The slug of the theme to create a blueprint for.
- * @param {string} branch - The branch where the theme changes are located.
- * @returns {string} - A JSON string representing the blueprint.
- */
 function createBlueprint(themeSlug: string, branch: string): string {
+	debug(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
 	const template: Template = {
 		steps: [
 			{
@@ -47,28 +42,27 @@ function createBlueprint(themeSlug: string, branch: string): string {
 		],
 	};
 
-	return JSON.stringify(template);
+	const blueprint = JSON.stringify(template);
+	debug(`Blueprint created: ${blueprint}`);
+	return blueprint;
 }
 
-/*
- * This function creates a comment on a PR with preview links for the changed themes.
- * It is used by `preview-theme` workflow.
- *
- * @param {ReturnType<typeof getOctokit>} github - An authenticated instance of the GitHub API.
- * @param {Context} context - The context of the event that triggered the action.
- * @param {string} changedThemeSlugs - A comma-separated string of theme slugs that have changed.
- */
 export default async function createPreviewLinksComment(
 	github: ReturnType<typeof getOctokit>,
 	context: Context,
 	changedThemeSlugs: string,
 ): Promise<void> {
+	debug('Starting createPreviewLinksComment');
 	const pullRequest = context.payload?.pull_request;
 	if (!pullRequest) {
+		debug('No pull request found in context payload');
 		throw new Error('No pull request found in context payload');
 	}
 
+	debug(`Pull request found: #${pullRequest.number}`);
 	const changedThemes = changedThemeSlugs.split(',');
+	debug(`Changed themes: ${changedThemes.join(', ')}`);
+
 	const previewLinks = changedThemes
 		.map((theme) => {
 			const [themeName, themeDir] = theme.split(':');
@@ -83,7 +77,10 @@ export default async function createPreviewLinksComment(
 		})
 		.join('\n');
 
+	debug(`Preview links generated: ${previewLinks}`);
+
 	const includesChildThemes = previewLinks.includes('child of');
+	debug(`Includes child themes: ${includesChildThemes}`);
 
 	const comment = `
 I've detected changes to the following themes in this PR: ${changedThemes
@@ -107,7 +104,7 @@ ${
 		repo: context.repo.repo,
 	};
 
-	// Check if a comment already exists and update it if it does
+	debug('Checking for existing comments');
 	const { data: comments } = await github.rest.issues.listComments({
 		issue_number: pullRequest.number,
 		...repoData,
@@ -123,6 +120,7 @@ ${
 	};
 
 	if (existingComment) {
+		debug(`Updating existing comment: ${existingComment.id}`);
 		await github.rest.issues.updateComment({
 			comment_id: existingComment.id,
 			...commentObject,
@@ -130,7 +128,7 @@ ${
 		return;
 	}
 
-	// Create a new comment if one doesn't exist
+	debug('Creating new comment');
 	await github.rest.issues.createComment({
 		issue_number: pullRequest.number,
 		...commentObject,

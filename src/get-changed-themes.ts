@@ -1,23 +1,38 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getInput } from '@actions/core';
+import { debug, getInput } from '@actions/core';
 
 function runCommand(command: string): string {
-	return execSync(command, { encoding: 'utf-8' }).trim();
+	debug(`Running command: ${command}`);
+	const result = execSync(command, { encoding: 'utf-8' }).trim();
+	debug(`Command result: ${result}`);
+	return result;
 }
 
 function getChangedFiles(): string[] {
 	const ref = getInput('ref', { required: true });
-	const changedFiles = runCommand(`git diff --name-only HEAD ${ref}`);
-	return changedFiles.split('\n').filter((file) => file.trim() !== '');
+	const baseBranch = getInput('base-branch', { required: true });
+	debug(`Getting changed files for ref: ${ref}`);
+	// Fetch the base branch
+	runCommand(`git fetch origin ${baseBranch}`);
+	const changedFiles = runCommand(
+		`git diff --name-only ${ref} origin/${baseBranch}`,
+	);
+	const filesArray = changedFiles
+		.split('\n')
+		.filter((file) => file.trim() !== '');
+	debug(`Changed files: ${filesArray.join(', ')}`);
+	return filesArray;
 }
 
 function getThemeDetails(dirName: string): {
 	themeName: string;
 	parentTheme: string | null;
 } {
+	debug(`Getting theme details for directory: ${dirName}`);
 	const styleCssPath = path.join(dirName, 'style.css');
+	debug(`Reading ${styleCssPath}`);
 	const content = fs.readFileSync(styleCssPath, 'utf-8');
 
 	const themeNameMatch = content.match(/Theme Name:\s*(.*)/);
@@ -26,10 +41,12 @@ function getThemeDetails(dirName: string): {
 	const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
 	const parentTheme = parentThemeMatch ? parentThemeMatch[1].trim() : null;
 
+	debug(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
 	return { themeName, parentTheme };
 }
 
 function getUniqueDirs(changedFiles: string[]): Record<string, string> {
+	debug('Getting unique directories from changed files');
 	const uniqueDirs: Record<string, string> = {};
 
 	for (const file of changedFiles) {
@@ -42,6 +59,7 @@ function getUniqueDirs(changedFiles: string[]): Record<string, string> {
 					? `${themeName}_childof_${parentTheme}`
 					: themeName;
 				uniqueDirs[finalThemeName] = dirName;
+				debug(`Added ${finalThemeName}: ${dirName} to uniqueDirs`);
 				break;
 			}
 			dirName = path.dirname(dirName);
@@ -57,12 +75,15 @@ interface ThemeChangesResult {
 }
 
 export function detectThemeChanges(): ThemeChangesResult {
+	debug('Detecting theme changes');
 	const changedFiles = getChangedFiles();
 	const uniqueDirs = getUniqueDirs(changedFiles);
 
 	if (Object.keys(uniqueDirs).length === 0) {
+		debug('No theme changes detected');
 		return { hasThemeChanges: false, changedThemes: {} };
 	}
 
+	debug('Theme changes detected');
 	return { hasThemeChanges: true, changedThemes: uniqueDirs };
 }
