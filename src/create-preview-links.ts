@@ -19,6 +19,13 @@ interface Template {
 	steps: Step[];
 }
 
+/*
+ * This function creates a WordPress Playground blueprint JSON string for a theme.
+ *
+ * @param {string} themeSlug - The slug of the theme to create a blueprint for.
+ * @param {string} branch - The branch where the theme changes are located.
+ * @returns {string} - A JSON string representing the blueprint.
+ */
 function createBlueprint(themeSlug: string, branch: string): string {
 	debug(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
 	const template: Template = {
@@ -47,6 +54,14 @@ function createBlueprint(themeSlug: string, branch: string): string {
 	return blueprint;
 }
 
+/*
+ * This function creates a comment on a PR with preview links for the changed themes.
+ * It is used by `preview-theme` workflow.
+ *
+ * @param {ReturnType<typeof getOctokit>} github - An authenticated instance of the GitHub API.
+ * @param {Context} context - The context of the event that triggered the action.
+ * @param {string} changedThemeSlugs - A comma-separated string of theme slugs that have changed.
+ */
 export default async function createPreviewLinksComment(
 	github: ReturnType<typeof getOctokit>,
 	context: Context,
