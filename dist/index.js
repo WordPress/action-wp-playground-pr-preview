@@ -29255,6 +29255,10 @@ async function createPreviewLinksComment(github, context, changedThemeSlugs) {
         const [themeName, themeDir] = theme.split(':');
         const themeSlug = themeDir.split('/')[0].trim();
         const parentThemeSlug = themeName.split('_childof_')[1];
+        console.log('themeName', themeName);
+        console.log('themeSlug', themeSlug);
+        console.log('parentThemeSlug', parentThemeSlug);
+        console.log('themeDir', themeDir);
         return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
     })
         .join('\n');
@@ -31391,7 +31395,6 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
  * The entrypoint for the action.
  */
 const main_1 = __nccwpck_require__(399);
-// eslint-disable-next-line @typescript-eslint/no-floating-promises
 (0, main_1.run)();
 
 })();
