@@ -36,10 +36,13 @@ function getThemeDetails(dirName: string): {
 	const content = fs.readFileSync(styleCssPath, 'utf-8');
 
 	const themeNameMatch = content.match(/^Theme Name:\s*(.+)$/m);
-	const parentThemeMatch = content.match(/^Template:\s*(\S.*)?$/m);
+	const parentThemeMatch = content.match(/^Template:\s*(.+)$/m);
 
 	const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
-	const parentTheme = parentThemeMatch?.[1] ? parentThemeMatch[1].trim() : null;
+	const parentTheme =
+		parentThemeMatch && parentThemeMatch[1].trim() !== ''
+			? parentThemeMatch[1].trim()
+			: null;
 	console.log('themeName', themeName);
 	console.log('parentTheme', parentTheme);
 
