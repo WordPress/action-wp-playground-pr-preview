@@ -20,8 +20,6 @@ if ( ! function_exists( 'ueno_support' ) ) :
 	 * @return void
 	 */
 	function ueno_support() {
-
-		
 		// Enqueue editor styles.
 		add_editor_style( 'style.css' );
 

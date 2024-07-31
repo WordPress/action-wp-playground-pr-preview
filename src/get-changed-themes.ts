@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 import { debug, getInput } from '@actions/core';
 
 function runCommand(command: string): string {
@@ -26,29 +27,48 @@ function getChangedFiles(): string[] {
 	return filesArray;
 }
 
-function getThemeDetails(dirName: string): {
+function getThemeDetails(dirName: string): Promise<{
 	themeName: string;
 	parentTheme: string | null;
-} {
-	debug(`Getting theme details for directory: ${dirName}`);
-	const styleCssPath = path.join(dirName, 'style.css');
-	debug(`Reading ${styleCssPath}`);
-	const content = fs.readFileSync(styleCssPath, 'utf-8');
+}> {
+	return new Promise((resolve) => {
+		debug(`Getting theme details for directory: ${dirName}`);
+		const styleCssPath = path.join(dirName, 'style.css');
+		debug(`Reading ${styleCssPath}`);
 
-	const themeNameMatch = content.match(/^Theme Name:\s*(.+)$/m);
-	const parentThemeMatch = content.match(/^Template:\s*(.+)$/m);
+		let themeName = '';
+		let parentTheme: string | null = null;
 
-	const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
-	const parentTheme =
-		parentThemeMatch && parentThemeMatch[1].trim() !== ''
-			? parentThemeMatch[1].trim()
-			: null;
+		const fileStream = fs.createReadStream(styleCssPath);
+		const rl = readline.createInterface({
+			input: fileStream,
+			crlfDelay: Number.POSITIVE_INFINITY,
+		});
 
-	debug(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
-	return { themeName, parentTheme };
+		rl.on('line', (line) => {
+			const themeNameMatch = line.match(/^Theme Name:\s*(.+)$/);
+			if (themeNameMatch) {
+				themeName = themeNameMatch[1].trim();
+			}
+
+			const parentThemeMatch = line.match(/^Template:\s*(.*)$/);
+			if (parentThemeMatch) {
+				parentTheme = parentThemeMatch[1].trim() || null;
+			}
+		});
+
+		rl.on('close', () => {
+			debug(
+				`Found themeName: ${themeName}, parentTheme: ${parentTheme || 'null'}`,
+			);
+			resolve({ themeName, parentTheme });
+		});
+	});
 }
 
-function getUniqueDirs(changedFiles: string[]): Record<string, string> {
+async function getUniqueDirs(
+	changedFiles: string[],
+): Promise<Record<string, string>> {
 	debug('Getting unique directories from changed files');
 	const uniqueDirs: Record<string, string> = {};
 
@@ -57,7 +77,7 @@ function getUniqueDirs(changedFiles: string[]): Record<string, string> {
 		while (dirName !== '.') {
 			const styleCssPath = path.join(dirName, 'style.css');
 			if (fs.existsSync(styleCssPath)) {
-				const { themeName, parentTheme } = getThemeDetails(dirName);
+				const { themeName, parentTheme } = await getThemeDetails(dirName);
 				if (themeName) {
 					const finalThemeName = parentTheme
 						? `${themeName}_childof_${parentTheme}`
@@ -79,10 +99,10 @@ interface ThemeChangesResult {
 	changedThemes: Record<string, string>;
 }
 
-export function detectThemeChanges(): ThemeChangesResult {
+export async function detectThemeChanges(): Promise<ThemeChangesResult> {
 	debug('Detecting theme changes');
 	const changedFiles = getChangedFiles();
-	const uniqueDirs = getUniqueDirs(changedFiles);
+	const uniqueDirs = await getUniqueDirs(changedFiles);
 
 	if (Object.keys(uniqueDirs).length === 0) {
 		debug('No theme changes detected');

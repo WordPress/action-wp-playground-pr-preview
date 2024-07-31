@@ -65,7 +65,7 @@ function createBlueprint(themeSlug: string, branch: string): string {
 export default async function createPreviewLinksComment(
 	github: ReturnType<typeof getOctokit>,
 	context: Context,
-	changedThemeSlugs: string,
+	changedThemes: Record<string, string>,
 ): Promise<void> {
 	debug('Starting createPreviewLinksComment');
 	const pullRequest = context.payload?.pull_request;
@@ -75,16 +75,12 @@ export default async function createPreviewLinksComment(
 	}
 
 	debug(`Pull request found: #${pullRequest.number}`);
-	const changedThemes = changedThemeSlugs.split(',');
-	debug(`Changed themes: ${changedThemes.join(', ')}`);
+	debug(`Changed themes: ${changedThemes}`);
 
-	const previewLinks = changedThemes
-		.map((theme) => {
-			const [themeName, themeDir] = theme.split(':');
+	const previewLinks = Object.entries(changedThemes)
+		.map(([themeName, themeDir]) => {
 			const themeSlug = themeDir.split('/')[0].trim();
 			const parentThemeSlug = themeName.split('_childof_')[1];
-			console.log('themeSlug', themeSlug);
-			console.log('parentThemeSlug', parentThemeSlug);
 			return `- [Preview changes for **${
 				themeName.split('_childof_')[0]
 			}**](https://playground.wordpress.net/#${createBlueprint(
@@ -100,8 +96,10 @@ export default async function createPreviewLinksComment(
 	debug(`Includes child themes: ${includesChildThemes}`);
 
 	const comment = `
-I've detected changes to the following themes in this PR: ${changedThemes
-		.map((changedTheme) => changedTheme.split(':')[0].split('_childof_')[0])
+I've detected changes to the following themes in this PR: ${Object.keys(
+		changedThemes,
+	)
+		.map((themeName) => themeName.split('_childof_')[0])
 		.join(', ')}.
 
 You can preview these changes by following the links below:
