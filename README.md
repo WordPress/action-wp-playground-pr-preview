@@ -1,37 +1,38 @@
-# Create a GitHub Action Using TypeScript
+# WordPress Playground Theme Preview Action
 
-[![GitHub Super-Linter](https://github.com/actions/typescript-action/actions/workflows/linter.yml/badge.svg)](https://github.com/super-linter/super-linter)
-![CI](https://github.com/actions/typescript-action/actions/workflows/ci.yml/badge.svg)
-[![Check dist/](https://github.com/actions/typescript-action/actions/workflows/check-dist.yml/badge.svg)](https://github.com/actions/typescript-action/actions/workflows/check-dist.yml)
-[![CodeQL](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/actions/typescript-action/actions/workflows/codeql-analysis.yml)
-[![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
+This GitHub Action allows you to preview WordPress themes in a playground environment. It's designed to be used in pull request workflows to provide a quick and easy way to visualize theme changes.
 
-Use this template to bootstrap the creation of a TypeScript action. :rocket:
+## Inputs
 
-This template includes compilation support, tests, a validation workflow,
-publishing, and versioning guidance.
+| Name | Description | Required | Default |
+|------|-------------|----------|---------|
+| `github-token` | GitHub token for authentication | Yes | N/A |
+| `base-branch` | The branch to compare against | Yes | `main` |
+| `ref` | git ref SHA (commit hash) to compare against the base branch | Yes | `HEAD` |
 
-If you are new, there's also a simpler introduction in the
-[Hello world JavaScript action repository](https://github.com/actions/hello-world-javascript-action).
+## Usage
 
-## Create Your Own Action
+To use this action in your repo, add the following step:
 
-To create your own action, you can use this repository as a template! Just
-follow the below instructions:
+```yml
+preview-theme:
+  runs-on: ubuntu-latest
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    
+    - name: Preview Theme Changes
+      uses: vcanales/action-wp-playground-pr-preview@trunk
+      with: 
+        github-token: <your github token>
+        base-branch: <your base branch name>
+```
 
-1. Click the **Use this template** button at the top of the repository
-1. Select **Create a new repository**
-1. Select an owner and name for your new repository
-1. Click **Create repository**
-1. Clone your new repository
+## Development
 
-> [!IMPORTANT]
->
-> Make sure to remove or update the [`CODEOWNERS`](./CODEOWNERS) file! For
-> details on how to use this file, see
-> [About code owners](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners).
-
-## Initial Setup
+### Initial Setup
 
 After you've cloned the repository to your local machine or codespace, you'll
 need to perform some initial setup steps before you can develop your action.
@@ -72,7 +73,7 @@ need to perform some initial setup steps before you can develop your action.
    ...
    ```
 
-## Update the Action Metadata
+### Update the Action Metadata
 
 The [`action.yml`](action.yml) file defines metadata about your action, such as
 input(s) and output(s). For details about this file, see
@@ -81,7 +82,7 @@ input(s) and output(s). For details about this file, see
 When you copy this repository, update `action.yml` with the name, description,
 inputs, and outputs for your action.
 
-## Update the Action Code
+### Update the Action Code
 
 The [`src/`](./src/) directory is the heart of your action! This contains the
 source code that will be run when your action is invoked. You can replace the
@@ -153,7 +154,7 @@ For information about versioning your action, see
 [Versioning](https://github.com/actions/toolkit/blob/master/docs/action-versioning.md)
 in the GitHub Actions toolkit.
 
-## Validate the Action
+### Validate the Action
 
 You can now validate the action by referencing it in a workflow file. For
 example, [`ci.yml`](./.github/workflows/ci.yml) demonstrates how to reference an
@@ -179,7 +180,7 @@ steps:
 For example workflow runs, check out the
 [Actions tab](https://github.com/actions/typescript-action/actions)! :rocket:
 
-## Usage
+### Usage
 
 After testing, you can create version tag(s) that developers can use to
 reference different stable versions of your action. For more information, see
@@ -207,7 +208,7 @@ steps:
     run: echo "${{ steps.test-action.outputs.time }}"
 ```
 
-## Publishing a New Release
+### Publishing a New Release
 
 This project includes a helper script, [`script/release`](./script/release)
 designed to streamline the process of tagging and pushing new releases for
