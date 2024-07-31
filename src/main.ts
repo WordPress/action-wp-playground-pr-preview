@@ -23,7 +23,7 @@ export async function run() {
 
 		// Get the changed themes
 		debug('Detecting theme changes');
-		const { hasThemeChanges, changedThemes } = detectThemeChanges();
+		const { hasThemeChanges, changedThemes } = await detectThemeChanges();
 		debug(`Theme changes detected: ${hasThemeChanges}`);
 
 		if (!hasThemeChanges) {
@@ -31,10 +31,7 @@ export async function run() {
 			return;
 		}
 
-		const changedThemeSlugs = Object.keys(changedThemes).join(',');
-		debug(`Changed theme slugs: ${changedThemeSlugs}`);
-
-		await createPreviewLinksComment(octokit, context, changedThemeSlugs);
+		await createPreviewLinksComment(octokit, context, changedThemes);
 		debug('Preview links comment created');
 	} catch (error: unknown) {
 		if (error instanceof Error) {

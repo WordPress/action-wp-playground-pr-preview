@@ -29240,7 +29240,7 @@ function createBlueprint(themeSlug, branch) {
  * @param {Context} context - The context of the event that triggered the action.
  * @param {string} changedThemeSlugs - A comma-separated string of theme slugs that have changed.
  */
-async function createPreviewLinksComment(github, context, changedThemeSlugs) {
+async function createPreviewLinksComment(github, context, changedThemes) {
     (0, core_1.debug)('Starting createPreviewLinksComment');
     const pullRequest = context.payload?.pull_request;
     if (!pullRequest) {
@@ -29248,15 +29248,11 @@ async function createPreviewLinksComment(github, context, changedThemeSlugs) {
         throw new Error('No pull request found in context payload');
     }
     (0, core_1.debug)(`Pull request found: #${pullRequest.number}`);
-    const changedThemes = changedThemeSlugs.split(',');
-    (0, core_1.debug)(`Changed themes: ${changedThemes.join(', ')}`);
-    const previewLinks = changedThemes
-        .map((theme) => {
-        const [themeName, themeDir] = theme.split(':');
+    (0, core_1.debug)(`Changed themes: ${changedThemes}`);
+    const previewLinks = Object.entries(changedThemes)
+        .map(([themeName, themeDir]) => {
         const themeSlug = themeDir.split('/')[0].trim();
         const parentThemeSlug = themeName.split('_childof_')[1];
-        console.log('themeSlug', themeSlug);
-        console.log('parentThemeSlug', parentThemeSlug);
         return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
     })
         .join('\n');
@@ -29264,8 +29260,8 @@ async function createPreviewLinksComment(github, context, changedThemeSlugs) {
     const includesChildThemes = previewLinks.includes('child of');
     (0, core_1.debug)(`Includes child themes: ${includesChildThemes}`);
     const comment = `
-I've detected changes to the following themes in this PR: ${changedThemes
-        .map((changedTheme) => changedTheme.split(':')[0].split('_childof_')[0])
+I've detected changes to the following themes in this PR: ${Object.keys(changedThemes)
+        .map((themeName) => themeName.split('_childof_')[0])
         .join(', ')}.
 
 You can preview these changes by following the links below:
@@ -29344,6 +29340,7 @@ exports.detectThemeChanges = void 0;
 const node_child_process_1 = __nccwpck_require__(7718);
 const fs = __importStar(__nccwpck_require__(7561));
 const path = __importStar(__nccwpck_require__(9411));
+const readline = __importStar(__nccwpck_require__(1747));
 const core_1 = __nccwpck_require__(2186);
 function runCommand(command) {
     (0, core_1.debug)(`Running command: ${command}`);
@@ -29365,20 +29362,34 @@ function getChangedFiles() {
     return filesArray;
 }
 function getThemeDetails(dirName) {
-    (0, core_1.debug)(`Getting theme details for directory: ${dirName}`);
-    const styleCssPath = path.join(dirName, 'style.css');
-    (0, core_1.debug)(`Reading ${styleCssPath}`);
-    const content = fs.readFileSync(styleCssPath, 'utf-8');
-    const themeNameMatch = content.match(/^Theme Name:\s*(.+)$/m);
-    const parentThemeMatch = content.match(/^Template:\s*(.+)$/m);
-    const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
-    const parentTheme = parentThemeMatch && parentThemeMatch[1].trim() !== ''
-        ? parentThemeMatch[1].trim()
-        : null;
-    (0, core_1.debug)(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
-    return { themeName, parentTheme };
+    return new Promise((resolve) => {
+        (0, core_1.debug)(`Getting theme details for directory: ${dirName}`);
+        const styleCssPath = path.join(dirName, 'style.css');
+        (0, core_1.debug)(`Reading ${styleCssPath}`);
+        let themeName = '';
+        let parentTheme = null;
+        const fileStream = fs.createReadStream(styleCssPath);
+        const rl = readline.createInterface({
+            input: fileStream,
+            crlfDelay: Number.POSITIVE_INFINITY,
+        });
+        rl.on('line', (line) => {
+            const themeNameMatch = line.match(/^Theme Name:\s*(.+)$/);
+            if (themeNameMatch) {
+                themeName = themeNameMatch[1].trim();
+            }
+            const parentThemeMatch = line.match(/^Template:\s*(.*)$/);
+            if (parentThemeMatch) {
+                parentTheme = parentThemeMatch[1].trim() || null;
+            }
+        });
+        rl.on('close', () => {
+            (0, core_1.debug)(`Found themeName: ${themeName}, parentTheme: ${parentTheme || 'null'}`);
+            resolve({ themeName, parentTheme });
+        });
+    });
 }
-function getUniqueDirs(changedFiles) {
+async function getUniqueDirs(changedFiles) {
     (0, core_1.debug)('Getting unique directories from changed files');
     const uniqueDirs = {};
     for (const file of changedFiles) {
@@ -29386,7 +29397,7 @@ function getUniqueDirs(changedFiles) {
         while (dirName !== '.') {
             const styleCssPath = path.join(dirName, 'style.css');
             if (fs.existsSync(styleCssPath)) {
-                const { themeName, parentTheme } = getThemeDetails(dirName);
+                const { themeName, parentTheme } = await getThemeDetails(dirName);
                 if (themeName) {
                     const finalThemeName = parentTheme
                         ? `${themeName}_childof_${parentTheme}`
@@ -29401,10 +29412,10 @@ function getUniqueDirs(changedFiles) {
     }
     return uniqueDirs;
 }
-function detectThemeChanges() {
+async function detectThemeChanges() {
     (0, core_1.debug)('Detecting theme changes');
     const changedFiles = getChangedFiles();
-    const uniqueDirs = getUniqueDirs(changedFiles);
+    const uniqueDirs = await getUniqueDirs(changedFiles);
     if (Object.keys(uniqueDirs).length === 0) {
         (0, core_1.debug)('No theme changes detected');
         return { hasThemeChanges: false, changedThemes: {} };
@@ -29448,15 +29459,13 @@ async function run() {
         }
         // Get the changed themes
         (0, core_1.debug)('Detecting theme changes');
-        const { hasThemeChanges, changedThemes } = (0, get_changed_themes_1.detectThemeChanges)();
+        const { hasThemeChanges, changedThemes } = await (0, get_changed_themes_1.detectThemeChanges)();
         (0, core_1.debug)(`Theme changes detected: ${hasThemeChanges}`);
         if (!hasThemeChanges) {
             (0, core_1.debug)('No theme changes, exiting');
             return;
         }
-        const changedThemeSlugs = Object.keys(changedThemes).join(',');
-        (0, core_1.debug)(`Changed theme slugs: ${changedThemeSlugs}`);
-        await (0, create_preview_links_1.default)(octokit, github_1.context, changedThemeSlugs);
+        await (0, create_preview_links_1.default)(octokit, github_1.context, changedThemes);
         (0, core_1.debug)('Preview links comment created');
     }
     catch (error) {
@@ -29598,6 +29607,14 @@ module.exports = require("node:fs");
 
 "use strict";
 module.exports = require("node:path");
+
+/***/ }),
+
+/***/ 1747:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("node:readline");
 
 /***/ }),
 
