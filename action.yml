@@ -3,7 +3,7 @@ description: 'A GitHub Action to preview WordPress themes in a playground enviro
 inputs:
   github-token:
     description: 'GitHub token'
-    required: false
+    required: true
   ref: 
     description: 'git ref SHA'
     required: true
