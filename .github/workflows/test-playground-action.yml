@@ -22,4 +22,5 @@ jobs:
       - name: Create Preview Links
         uses: ./
         with:
+          GITHUB_TOKEN: ${{ github.token }}
           ref: ${{ github.event.pull_request.head.sha }}
