@@ -40,6 +40,8 @@ function getThemeDetails(dirName: string): {
 
 	const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
 	const parentTheme = parentThemeMatch?.[1] ? parentThemeMatch[1].trim() : null;
+	console.log('themeName', themeName);
+	console.log('parentTheme', parentTheme);
 
 	debug(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
 	return { themeName, parentTheme };

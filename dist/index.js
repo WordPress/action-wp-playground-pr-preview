@@ -29258,7 +29258,6 @@ async function createPreviewLinksComment(github, context, changedThemeSlugs) {
         console.log('themeName', themeName);
         console.log('themeSlug', themeSlug);
         console.log('parentThemeSlug', parentThemeSlug);
-        console.log('themeDir', themeDir);
         return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
     })
         .join('\n');
@@ -29375,6 +29374,8 @@ function getThemeDetails(dirName) {
     const parentThemeMatch = content.match(/^Template:\s*(\S.*)?$/m);
     const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
     const parentTheme = parentThemeMatch?.[1] ? parentThemeMatch[1].trim() : null;
+    console.log('themeName', themeName);
+    console.log('parentTheme', parentTheme);
     (0, core_1.debug)(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
     return { themeName, parentTheme };
 }
