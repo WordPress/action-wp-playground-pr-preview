@@ -29199,6 +29199,13 @@ function wrappy (fn, cb) {
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core_1 = __nccwpck_require__(2186);
+/*
+ * This function creates a WordPress Playground blueprint JSON string for a theme.
+ *
+ * @param {string} themeSlug - The slug of the theme to create a blueprint for.
+ * @param {string} branch - The branch where the theme changes are located.
+ * @returns {string} - A JSON string representing the blueprint.
+ */
 function createBlueprint(themeSlug, branch) {
     (0, core_1.debug)(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
     const template = {
@@ -29225,6 +29232,14 @@ function createBlueprint(themeSlug, branch) {
     (0, core_1.debug)(`Blueprint created: ${blueprint}`);
     return blueprint;
 }
+/*
+ * This function creates a comment on a PR with preview links for the changed themes.
+ * It is used by `preview-theme` workflow.
+ *
+ * @param {ReturnType<typeof getOctokit>} github - An authenticated instance of the GitHub API.
+ * @param {Context} context - The context of the event that triggered the action.
+ * @param {string} changedThemeSlugs - A comma-separated string of theme slugs that have changed.
+ */
 async function createPreviewLinksComment(github, context, changedThemeSlugs) {
     (0, core_1.debug)('Starting createPreviewLinksComment');
     const pullRequest = context.payload?.pull_request;
