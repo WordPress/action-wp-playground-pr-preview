@@ -7,6 +7,7 @@ inputs:
   ref: 
     description: 'git ref SHA'
     required: true
+    default: 'HEAD'
   base-branch:
     description: 'The branch with with to compare'
     required: true
