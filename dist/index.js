@@ -29373,7 +29373,9 @@ function getThemeDetails(dirName) {
     const themeNameMatch = content.match(/^Theme Name:\s*(.+)$/m);
     const parentThemeMatch = content.match(/^Template:\s*(.+)$/m);
     const themeName = themeNameMatch ? themeNameMatch[1].trim() : '';
-    const parentTheme = parentThemeMatch ? parentThemeMatch[1].trim() : null;
+    const parentTheme = parentThemeMatch && parentThemeMatch[1].trim() !== ''
+        ? parentThemeMatch[1].trim()
+        : null;
     (0, core_1.debug)(`Found themeName: ${themeName}, parentTheme: ${parentTheme}`);
     return { themeName, parentTheme };
 }
