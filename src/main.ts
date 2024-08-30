@@ -28,7 +28,7 @@ export async function run() {
 		debug(`Theme changes detected: ${hasThemeChanges}`);
 
 		if (!hasThemeChanges) {
-			debug('No theme changes, exiting');
+			debug('No theme changes');
 			await deletePreviewLinksComment(octokit, context);
 			return;
 		}
