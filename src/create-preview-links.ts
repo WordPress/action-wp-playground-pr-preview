@@ -19,6 +19,8 @@ interface Template {
 	steps: Step[];
 }
 
+export const COMMENT_BLOCK_START = '### Preview changes';
+
 /*
  * This function creates a WordPress Playground blueprint JSON string for a theme.
  *
@@ -127,10 +129,10 @@ ${
 	const existingComment = comments.find(
 		(comment) =>
 			comment.user?.login === 'github-actions[bot]' &&
-			comment.body?.startsWith('### Preview changes'),
+			comment.body?.includes(COMMENT_BLOCK_START),
 	);
 	const commentObject = {
-		body: `### Preview changes\n${comment}`,
+		body: `${COMMENT_BLOCK_START}\n${comment}`,
 		...repoData,
 	};
 

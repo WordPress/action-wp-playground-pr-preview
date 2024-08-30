@@ -1,6 +1,8 @@
 import { getOctokit } from '@actions/github';
 import type { Context } from '@actions/github/lib/context';
-import createPreviewLinksComment from '../src/create-preview-links';
+import createPreviewLinksComment, {
+	COMMENT_BLOCK_START,
+} from '../src/create-preview-links';
 
 jest.mock('@actions/github', () => {
 	return {
@@ -79,7 +81,7 @@ describe('createPreviewLinksComment', () => {
 				{
 					id: 123,
 					user: { login: 'github-actions[bot]' },
-					body: '### Preview changes',
+					body: COMMENT_BLOCK_START,
 				},
 			],
 		});
@@ -122,7 +124,7 @@ I will update this comment with the latest preview links as you push more change
 			issue_number: mockContext.payload?.pull_request?.number,
 			owner: mockContext.repo.owner,
 			repo: mockContext.repo.repo,
-			body: `### Preview changes\n${expectedBody}`,
+			body: `${COMMENT_BLOCK_START}\n${expectedBody}`,
 		});
 	});
 });
