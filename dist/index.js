@@ -29403,6 +29403,15 @@ async function getChangedFiles() {
     const octokit = (0, github_1.getOctokit)(token);
     const { owner, repo } = github_1.context.repo;
     (0, core_1.debug)(`Getting changed files for ref: ${ref}`);
+    /*
+     * This was previously using git commands to get the changed files, but it was
+     * not working as expected in the GitHub Actions environment, as merge-base which was used to
+     * find the common ancestor of the base branch and the current ref is not well supported.
+     *
+     * Reference issue: https://github.com/actions/checkout/discussions/423
+     *
+     * Instead of using workarounds, the current approach is to use the GitHub API to get the changed files.
+     */
     try {
         // Find the merge base commit
         const mergeBaseResponse = await octokit.rest.repos.compareCommits({
