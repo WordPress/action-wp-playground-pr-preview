@@ -17,9 +17,13 @@ function getChangedFiles(): string[] {
 	debug(`Getting changed files for ref: ${ref}`);
 	// Fetch the base branch
 	runCommand(`git fetch origin ${baseBranch}`);
-	const changedFiles = runCommand(
-		`git diff --name-only ${ref} origin/${baseBranch}`,
-	);
+	// Find the common ancestor (merge base) of the current branch and the base branch
+	const mergeBase = runCommand(
+		`git merge-base HEAD origin/${baseBranch}`,
+	).trim();
+	debug(`Merge base: ${mergeBase}`);
+	// Get the changed files between the merge base and the current HEAD
+	const changedFiles = runCommand(`git diff --name-only ${mergeBase} HEAD`);
 	const filesArray = changedFiles
 		.split('\n')
 		.filter((file) => file.trim() !== '');
