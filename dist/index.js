@@ -29198,7 +29198,9 @@ function wrappy (fn, cb) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.COMMENT_BLOCK_START = void 0;
 const core_1 = __nccwpck_require__(2186);
+exports.COMMENT_BLOCK_START = '### Preview changes';
 /*
  * This function creates a WordPress Playground blueprint JSON string for a theme.
  *
@@ -29283,9 +29285,9 @@ ${includesChildThemes
         ...repoData,
     });
     const existingComment = comments.find((comment) => comment.user?.login === 'github-actions[bot]' &&
-        comment.body?.startsWith('### Preview changes'));
+        comment.body?.includes(exports.COMMENT_BLOCK_START));
     const commentObject = {
-        body: `### Preview changes\n${comment}`,
+        body: `${exports.COMMENT_BLOCK_START}\n${comment}`,
         ...repoData,
     };
     if (existingComment) {
@@ -29303,6 +29305,51 @@ ${includesChildThemes
     });
 }
 exports["default"] = createPreviewLinksComment;
+
+
+/***/ }),
+
+/***/ 7140:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+const core_1 = __nccwpck_require__(2186);
+const create_preview_links_1 = __nccwpck_require__(6444);
+/**
+ * Deletes the preview links comment from the PR.
+ *
+ * @param {ReturnType<typeof getOctokit>} github - An authenticated instance of the GitHub API.
+ * @param {Context} context - The context of the event that triggered the action.
+ */
+async function deletePreviewLinksComment(github, context) {
+    (0, core_1.debug)('Deleting preview links comment');
+    const pullRequest = context.payload?.pull_request;
+    if (!pullRequest) {
+        (0, core_1.debug)('No pull request found in context payload');
+        throw new Error('No pull request found in context payload');
+    }
+    const repoData = {
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+    };
+    (0, core_1.debug)('Checking for existing comments');
+    const { data: comments } = await github.rest.issues.listComments({
+        issue_number: pullRequest.number,
+        ...repoData,
+    });
+    const existingComment = comments.find((comment) => comment.user?.login === 'github-actions[bot]' &&
+        comment.body?.includes(create_preview_links_1.COMMENT_BLOCK_START));
+    if (existingComment) {
+        (0, core_1.debug)(`Deleting existing comment: ${existingComment.id}`);
+        await github.rest.issues.deleteComment({
+            comment_id: existingComment.id,
+            ...repoData,
+        });
+    }
+}
+exports["default"] = deletePreviewLinksComment;
 
 
 /***/ }),
@@ -29415,7 +29462,9 @@ async function getUniqueDirs(changedFiles) {
 async function detectThemeChanges() {
     (0, core_1.debug)('Detecting theme changes');
     const changedFiles = getChangedFiles();
+    (0, core_1.debug)(`Changed files: ${JSON.stringify(changedFiles)}`);
     const uniqueDirs = await getUniqueDirs(changedFiles);
+    (0, core_1.debug)(`Unique dirs: ${JSON.stringify(uniqueDirs)}`);
     if (Object.keys(uniqueDirs).length === 0) {
         (0, core_1.debug)('No theme changes detected');
         return { hasThemeChanges: false, changedThemes: {} };
@@ -29441,6 +29490,7 @@ exports.run = void 0;
 const core_1 = __nccwpck_require__(2186);
 const github_1 = __nccwpck_require__(5438);
 const create_preview_links_1 = __importDefault(__nccwpck_require__(6444));
+const delete_comment_1 = __importDefault(__nccwpck_require__(7140));
 const get_changed_themes_1 = __nccwpck_require__(9254);
 async function run() {
     try {
@@ -29462,7 +29512,8 @@ async function run() {
         const { hasThemeChanges, changedThemes } = await (0, get_changed_themes_1.detectThemeChanges)();
         (0, core_1.debug)(`Theme changes detected: ${hasThemeChanges}`);
         if (!hasThemeChanges) {
-            (0, core_1.debug)('No theme changes, exiting');
+            (0, core_1.debug)('No theme changes');
+            await (0, delete_comment_1.default)(octokit, github_1.context);
             return;
         }
         await (0, create_preview_links_1.default)(octokit, github_1.context, changedThemes);
