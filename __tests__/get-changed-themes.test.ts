@@ -52,17 +52,21 @@ describe('detectThemeChanges', () => {
 		mockExecSync.mockReturnValue('theme1/style.css\ntheme2/style.css');
 		mockFsExistsSync.mockReturnValue(true);
 
+		let currentTheme = 0;
+		const themes = [
+			{ name: 'MockTheme1', parent: 'MockParent1' },
+			{ name: 'MockTheme2', parent: 'MockParent2' },
+		];
+
 		const mockReadlineInterface: {
 			on: jest.Mock;
 			close: jest.Mock;
 		} = {
 			on: jest.fn((event: string, callback: (line: string) => void) => {
 				if (event === 'line') {
-					callback('Theme Name: MockTheme1');
-					callback('Template: MockParent1');
-					callback(''); // Add an empty line to separate themes
-					callback('Theme Name: MockTheme2');
-					callback('Template: MockParent2');
+					callback(`Theme Name: ${themes[currentTheme].name}`);
+					callback(`Template: ${themes[currentTheme].parent}`);
+					currentTheme++;
 				}
 				if (event === 'close') {
 					(callback as () => void)();
@@ -83,7 +87,7 @@ describe('detectThemeChanges', () => {
 			hasThemeChanges: true,
 			changedThemes: {
 				MockTheme1_childof_MockParent1: 'theme1',
-				MockTheme2_childof_MockParent1: 'theme2',
+				MockTheme2_childof_MockParent2: 'theme2',
 			},
 		});
 	});
