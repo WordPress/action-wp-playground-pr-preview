@@ -56,7 +56,7 @@ describe('run', () => {
 	});
 
 	it('should clone the repository and create a comment when themes have changed', async () => {
-		mockDetectThemeChanges.mockReturnValue({
+		mockDetectThemeChanges.mockResolvedValue({
 			hasThemeChanges: true,
 			changedThemes: { theme1: 'dir1', theme2_childof_parentTheme: 'dir2' },
 		});
@@ -66,12 +66,12 @@ describe('run', () => {
 		expect(mockCreatePreviewLinksComment).toHaveBeenCalledWith(
 			mockOctokit,
 			context,
-			'theme1,theme2_childof_parentTheme',
+			{ theme1: 'dir1', theme2_childof_parentTheme: 'dir2' },
 		);
 	});
 
 	it('should not create a comment when there are no theme changes', async () => {
-		mockDetectThemeChanges.mockReturnValue({
+		mockDetectThemeChanges.mockResolvedValue({
 			hasThemeChanges: false,
 			changedThemes: {},
 		});

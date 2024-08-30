@@ -43,7 +43,10 @@ describe('createPreviewLinksComment', () => {
 	});
 
 	it('should create a new comment with preview links when no existing comment is found', async () => {
-		const changedThemeSlugs = 'theme1:dir1,theme2_childof_parentTheme:dir2';
+		const changedThemeSlugs: Record<string, string> = {
+			theme1: 'dir1',
+			theme2_childof_parentTheme: 'dir2',
+		};
 
 		await createPreviewLinksComment(mockGithub, mockContext, changedThemeSlugs);
 
@@ -64,7 +67,10 @@ describe('createPreviewLinksComment', () => {
 	});
 
 	it('should update an existing comment with new preview links', async () => {
-		const changedThemeSlugs = 'theme1:dir1,theme2_childof_parentTheme:dir2';
+		const changedThemeSlugs: Record<string, string> = {
+			theme1: 'dir1',
+			theme2_childof_parentTheme: 'dir2',
+		};
 
 		(
 			mockGithub.rest.issues.listComments as unknown as jest.Mock
@@ -97,7 +103,7 @@ describe('createPreviewLinksComment', () => {
 	});
 
 	it('should handle themes without parent themes correctly', async () => {
-		const changedThemeSlugs = 'theme1:dir1';
+		const changedThemeSlugs: Record<string, string> = { theme1: 'dir1' };
 
 		await createPreviewLinksComment(mockGithub, mockContext, changedThemeSlugs);
 
