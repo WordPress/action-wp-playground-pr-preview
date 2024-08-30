@@ -29404,10 +29404,20 @@ async function getChangedFiles() {
     const { owner, repo } = github_1.context.repo;
     (0, core_1.debug)(`Getting changed files for ref: ${ref}`);
     try {
-        const response = await octokit.rest.repos.compareCommits({
+        // Find the merge base commit
+        const mergeBaseResponse = await octokit.rest.repos.compareCommits({
             owner,
             repo,
             base: baseBranch,
+            head: ref,
+        });
+        const mergeBaseCommit = mergeBaseResponse.data.merge_base_commit.sha;
+        (0, core_1.debug)(`Merge base commit: ${mergeBaseCommit}`);
+        // Compare the merge base commit with the current ref
+        const response = await octokit.rest.repos.compareCommits({
+            owner,
+            repo,
+            base: mergeBaseCommit,
             head: ref,
         });
         const filesArray = response.data.files?.map((file) => file.filename) || [];
