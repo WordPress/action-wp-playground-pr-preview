@@ -102,7 +102,9 @@ interface ThemeChangesResult {
 export async function detectThemeChanges(): Promise<ThemeChangesResult> {
 	debug('Detecting theme changes');
 	const changedFiles = getChangedFiles();
+	debug(`Changed files: ${JSON.stringify(changedFiles)}`);
 	const uniqueDirs = await getUniqueDirs(changedFiles);
+	debug(`Unique dirs: ${JSON.stringify(uniqueDirs)}`);
 
 	if (Object.keys(uniqueDirs).length === 0) {
 		debug('No theme changes detected');

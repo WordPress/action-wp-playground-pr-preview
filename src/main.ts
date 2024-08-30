@@ -1,6 +1,7 @@
 import { debug, getInput, setFailed } from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import createPreviewLinksComment from './create-preview-links';
+import deletePreviewLinksComment from './delete-comment';
 import { detectThemeChanges } from './get-changed-themes';
 
 export async function run() {
@@ -28,6 +29,7 @@ export async function run() {
 
 		if (!hasThemeChanges) {
 			debug('No theme changes, exiting');
+			await deletePreviewLinksComment(octokit, context);
 			return;
 		}
 

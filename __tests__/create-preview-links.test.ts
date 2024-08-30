@@ -1,6 +1,8 @@
 import { getOctokit } from '@actions/github';
 import type { Context } from '@actions/github/lib/context';
-import createPreviewLinksComment from '../src/create-preview-links';
+import createPreviewLinksComment, {
+	COMMENT_BLOCK_START,
+} from '../src/create-preview-links';
 
 jest.mock('@actions/github', () => {
 	return {
@@ -43,7 +45,10 @@ describe('createPreviewLinksComment', () => {
 	});
 
 	it('should create a new comment with preview links when no existing comment is found', async () => {
-		const changedThemeSlugs = 'theme1:dir1,theme2_childof_parentTheme:dir2';
+		const changedThemeSlugs: Record<string, string> = {
+			theme1: 'dir1',
+			theme2_childof_parentTheme: 'dir2',
+		};
 
 		await createPreviewLinksComment(mockGithub, mockContext, changedThemeSlugs);
 
@@ -64,7 +69,10 @@ describe('createPreviewLinksComment', () => {
 	});
 
 	it('should update an existing comment with new preview links', async () => {
-		const changedThemeSlugs = 'theme1:dir1,theme2_childof_parentTheme:dir2';
+		const changedThemeSlugs: Record<string, string> = {
+			theme1: 'dir1',
+			theme2_childof_parentTheme: 'dir2',
+		};
 
 		(
 			mockGithub.rest.issues.listComments as unknown as jest.Mock
@@ -73,7 +81,7 @@ describe('createPreviewLinksComment', () => {
 				{
 					id: 123,
 					user: { login: 'github-actions[bot]' },
-					body: '### Preview changes',
+					body: COMMENT_BLOCK_START,
 				},
 			],
 		});
@@ -97,7 +105,7 @@ describe('createPreviewLinksComment', () => {
 	});
 
 	it('should handle themes without parent themes correctly', async () => {
-		const changedThemeSlugs = 'theme1:dir1';
+		const changedThemeSlugs: Record<string, string> = { theme1: 'dir1' };
 
 		await createPreviewLinksComment(mockGithub, mockContext, changedThemeSlugs);
 
@@ -116,7 +124,7 @@ I will update this comment with the latest preview links as you push more change
 			issue_number: mockContext.payload?.pull_request?.number,
 			owner: mockContext.repo.owner,
 			repo: mockContext.repo.repo,
-			body: `### Preview changes\n${expectedBody}`,
+			body: `${COMMENT_BLOCK_START}\n${expectedBody}`,
 		});
 	});
 });
