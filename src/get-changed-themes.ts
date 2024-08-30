@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { debug, getInput } from '@actions/core';
+import { context, getOctokit } from '@actions/github';
 
 function runCommand(command: string): string {
 	debug(`Running command: ${command}`);
@@ -10,25 +11,30 @@ function runCommand(command: string): string {
 	debug(`Command result: ${result}`);
 	return result;
 }
-
-function getChangedFiles(): string[] {
+async function getChangedFiles(): Promise<string[]> {
 	const ref = getInput('ref', { required: true });
 	const baseBranch = getInput('base-branch', { required: true });
+	const token = getInput('github-token', { required: true });
+	const octokit = getOctokit(token);
+	const { owner, repo } = context.repo;
+
 	debug(`Getting changed files for ref: ${ref}`);
-	// Fetch the base branch
-	runCommand(`git fetch origin ${baseBranch}`);
-	// Find the common ancestor (merge base) of the current branch and the base branch
-	const mergeBase = runCommand(
-		`git merge-base HEAD origin/${baseBranch}`,
-	).trim();
-	debug(`Merge base: ${mergeBase}`);
-	// Get the changed files between the merge base and the current HEAD
-	const changedFiles = runCommand(`git diff --name-only ${mergeBase} HEAD`);
-	const filesArray = changedFiles
-		.split('\n')
-		.filter((file) => file.trim() !== '');
-	debug(`Changed files: ${filesArray.join(', ')}`);
-	return filesArray;
+
+	try {
+		const response = await octokit.rest.repos.compareCommits({
+			owner,
+			repo,
+			base: baseBranch,
+			head: ref,
+		});
+
+		const filesArray = response.data.files?.map((file) => file.filename) || [];
+		debug(`Changed files: ${filesArray.join(', ')}`);
+		return filesArray;
+	} catch (error) {
+		debug(`Error getting changed files: ${error}`);
+		throw new Error(`Failed to get changed files: ${error}`);
+	}
 }
 
 function getThemeDetails(dirName: string): Promise<{
@@ -105,7 +111,7 @@ interface ThemeChangesResult {
 
 export async function detectThemeChanges(): Promise<ThemeChangesResult> {
 	debug('Detecting theme changes');
-	const changedFiles = getChangedFiles();
+	const changedFiles = await getChangedFiles();
 	debug(`Changed files: ${JSON.stringify(changedFiles)}`);
 	const uniqueDirs = await getUniqueDirs(changedFiles);
 	debug(`Unique dirs: ${JSON.stringify(uniqueDirs)}`);

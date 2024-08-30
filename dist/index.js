@@ -29389,28 +29389,35 @@ const fs = __importStar(__nccwpck_require__(7561));
 const path = __importStar(__nccwpck_require__(9411));
 const readline = __importStar(__nccwpck_require__(1747));
 const core_1 = __nccwpck_require__(2186);
+const github_1 = __nccwpck_require__(5438);
 function runCommand(command) {
     (0, core_1.debug)(`Running command: ${command}`);
     const result = (0, node_child_process_1.execSync)(command, { encoding: 'utf-8' }).trim();
     (0, core_1.debug)(`Command result: ${result}`);
     return result;
 }
-function getChangedFiles() {
+async function getChangedFiles() {
     const ref = (0, core_1.getInput)('ref', { required: true });
     const baseBranch = (0, core_1.getInput)('base-branch', { required: true });
+    const token = (0, core_1.getInput)('github-token', { required: true });
+    const octokit = (0, github_1.getOctokit)(token);
+    const { owner, repo } = github_1.context.repo;
     (0, core_1.debug)(`Getting changed files for ref: ${ref}`);
-    // Fetch the base branch
-    runCommand(`git fetch origin ${baseBranch}`);
-    // Find the common ancestor (merge base) of the current branch and the base branch
-    const mergeBase = runCommand(`git merge-base HEAD origin/${baseBranch}`).trim();
-    (0, core_1.debug)(`Merge base: ${mergeBase}`);
-    // Get the changed files between the merge base and the current HEAD
-    const changedFiles = runCommand(`git diff --name-only ${mergeBase} HEAD`);
-    const filesArray = changedFiles
-        .split('\n')
-        .filter((file) => file.trim() !== '');
-    (0, core_1.debug)(`Changed files: ${filesArray.join(', ')}`);
-    return filesArray;
+    try {
+        const response = await octokit.rest.repos.compareCommits({
+            owner,
+            repo,
+            base: baseBranch,
+            head: ref,
+        });
+        const filesArray = response.data.files?.map((file) => file.filename) || [];
+        (0, core_1.debug)(`Changed files: ${filesArray.join(', ')}`);
+        return filesArray;
+    }
+    catch (error) {
+        (0, core_1.debug)(`Error getting changed files: ${error}`);
+        throw new Error(`Failed to get changed files: ${error}`);
+    }
 }
 function getThemeDetails(dirName) {
     return new Promise((resolve) => {
@@ -29465,7 +29472,7 @@ async function getUniqueDirs(changedFiles) {
 }
 async function detectThemeChanges() {
     (0, core_1.debug)('Detecting theme changes');
-    const changedFiles = getChangedFiles();
+    const changedFiles = await getChangedFiles();
     (0, core_1.debug)(`Changed files: ${JSON.stringify(changedFiles)}`);
     const uniqueDirs = await getUniqueDirs(changedFiles);
     (0, core_1.debug)(`Unique dirs: ${JSON.stringify(uniqueDirs)}`);
