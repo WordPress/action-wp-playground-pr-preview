@@ -35,6 +35,7 @@ export const COMMENT_BLOCK_START = '### Preview changes';
  *
  * @param {string} themeSlug - The slug of the theme to create a blueprint for.
  * @param {string} branch - The branch where the theme changes are located.
+ * @param {string} repo - The repository where the theme changes are located, in the format 'owner/repo'.
  * @returns {string} - A JSON string representing the blueprint.
  */
 function createBlueprint(
@@ -42,7 +43,9 @@ function createBlueprint(
 	branch: string,
 	repo: string,
 ): string {
-	debug(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
+	debug(
+		`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}, repo: ${repo}`,
+	);
 	const template: Template = {
 		steps: [
 			{
