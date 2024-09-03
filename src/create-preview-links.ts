@@ -37,7 +37,11 @@ export const COMMENT_BLOCK_START = '### Preview changes';
  * @param {string} branch - The branch where the theme changes are located.
  * @returns {string} - A JSON string representing the blueprint.
  */
-function createBlueprint(themeSlug: string, branch: string): string {
+function createBlueprint(
+	themeSlug: string,
+	branch: string,
+	repo: string,
+): string {
 	debug(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
 	const template: Template = {
 		steps: [
@@ -60,7 +64,7 @@ function createBlueprint(themeSlug: string, branch: string): string {
 				step: 'installTheme',
 				themeZipFile: {
 					resource: 'url',
-					url: `https://github-proxy.com/proxy.php?action=partial&repo=Automattic/themes&directory=${themeSlug}&branch=${branch}`,
+					url: `https://github-proxy.com/proxy.php?action=partial&repo=${repo}&directory=${themeSlug}&branch=${branch}`,
 				},
 			},
 			{
@@ -102,11 +106,13 @@ export default async function createPreviewLinksComment(
 		.map(([themeName, themeDir]) => {
 			const themeSlug = themeDir.split('/')[0].trim();
 			const parentThemeSlug = themeName.split('_childof_')[1];
+			const repo = `${context.repo.owner}/${context.repo.repo}`;
 			return `- [Preview changes for **${
 				themeName.split('_childof_')[0]
 			}**](https://playground.wordpress.net/#${createBlueprint(
 				themeSlug,
 				pullRequest.head.ref,
+				repo,
 			)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
 		})
 		.join('\n');
