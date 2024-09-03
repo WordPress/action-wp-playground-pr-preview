@@ -7,12 +7,21 @@ interface ThemeZipFile {
 	url: string;
 }
 
+interface PluginZipFile {
+	resource: string;
+	slug: string;
+}
+
 interface Step {
 	step: string;
 	username?: string;
 	password?: string;
 	themeZipFile?: ThemeZipFile;
+	pluginZipFile?: PluginZipFile;
 	themeFolderName?: string;
+	options?: {
+		activate?: boolean;
+	};
 }
 
 interface Template {
@@ -36,6 +45,16 @@ function createBlueprint(themeSlug: string, branch: string): string {
 				step: 'login',
 				username: 'admin',
 				password: 'password',
+			},
+			{
+				step: 'installPlugin',
+				pluginZipFile: {
+					resource: 'wordpress.org/plugins',
+					slug: 'theme-check',
+				},
+				options: {
+					activate: true,
+				},
 			},
 			{
 				step: 'installTheme',
