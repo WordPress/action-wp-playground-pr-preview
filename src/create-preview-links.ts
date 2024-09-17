@@ -164,14 +164,16 @@ export default async function createPreviewLinksComment(
 			.map(([themeName, themeDir]) => {
 				const themeSlug = getThemeSlugFromStylesheet(themeDir);
 				const parentThemeSlug = themeName.split('_childof_')[1];
-				return `- [Preview changes for **${
-					themeName.split('_childof_')[0]
-				}**](https://playground.wordpress.net/#${createBlueprint(
+				const blueprintUrl = createBlueprint(
 					themeSlug,
 					pullRequest.head.ref,
 					repo,
 					themeSlug,
-				)}${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
+				);
+				const previewLink = `https://playground.wordpress.net/#${blueprintUrl}`;
+				return `- [Preview changes for **${themeName.split('_childof_')[0]}**](${previewLink})${
+					parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''
+				}`;
 			})
 			.join('\n');
 	}
