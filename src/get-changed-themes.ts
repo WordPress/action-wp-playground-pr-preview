@@ -5,12 +5,6 @@ import * as readline from 'node:readline';
 import { debug, getInput } from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 
-function runCommand(command: string): string {
-	debug(`Running command: ${command}`);
-	const result = execSync(command, { encoding: 'utf-8' }).trim();
-	debug(`Command result: ${result}`);
-	return result;
-}
 async function getChangedFiles(): Promise<string[]> {
 	const ref = getInput('ref', { required: true });
 	const baseBranch = getInput('base-branch', { required: true });
@@ -130,10 +124,24 @@ interface ThemeChangesResult {
 	changedThemes: Record<string, string>;
 }
 
-export async function detectThemeChanges(): Promise<ThemeChangesResult> {
+export async function detectThemeChanges(
+	isSingleTheme?: boolean,
+	themeDir?: string,
+): Promise<ThemeChangesResult> {
 	debug('Detecting theme changes');
 	const changedFiles = await getChangedFiles();
 	debug(`Changed files: ${JSON.stringify(changedFiles)}`);
+
+	if (isSingleTheme && themeDir) {
+		debug('Single theme mode: checking for any changes');
+		const hasThemeChanges = changedFiles.length > 0;
+		debug(`Has theme changes: ${hasThemeChanges}`);
+		return {
+			hasThemeChanges,
+			changedThemes: hasThemeChanges ? { [themeDir]: themeDir } : {},
+		};
+	}
+
 	const uniqueDirs = await getUniqueDirs(changedFiles);
 	debug(`Unique dirs: ${JSON.stringify(uniqueDirs)}`);
 
