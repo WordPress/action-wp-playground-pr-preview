@@ -12,6 +12,14 @@ inputs:
     description: 'The branch with with to compare'
     required: true
     default: 'main'
+  single-theme:
+    description: 'Whether the repository contains a single theme'
+    required: false
+    default: "false"
+  theme-dir:
+    description: 'The directory themes are stored'
+    required: false
+    default: "."
 runs:
   using: 'node20'
   main: 'dist/index.js'

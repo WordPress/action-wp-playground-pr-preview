@@ -29193,23 +29193,45 @@ function wrappy (fn, cb) {
 /***/ }),
 
 /***/ 6444:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
 
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.COMMENT_BLOCK_START = void 0;
+const node_fs_1 = __importDefault(__nccwpck_require__(7561));
+const node_path_1 = __importDefault(__nccwpck_require__(9411));
 const core_1 = __nccwpck_require__(2186);
 exports.COMMENT_BLOCK_START = '### Preview changes';
+function buildProxyURL(repo, branch, themeDir) {
+    const queryParams = {
+        action: themeDir ? 'partial' : 'archive',
+        repo: repo,
+        branch: branch,
+        ...(themeDir ? { directory: themeDir } : {}),
+    };
+    const queryString = new URLSearchParams(queryParams).toString();
+    return `https://github-proxy.com/proxy.php?${queryString}`;
+}
 /*
  * This function creates a WordPress Playground blueprint JSON string for a theme.
  *
- * @param {string} themeSlug - The slug of the theme to create a blueprint for.
+ * @param {string} themeSlug - The slug of the theme to create a blueprint for, also used to name the theme folder in Playground.
  * @param {string} branch - The branch where the theme changes are located.
+ * @param {string} repo - The repository where the theme changes are located, in the format 'owner/repo'.
+ * @param {string} themeDir - The directory of the theme in the repository.
  * @returns {string} - A JSON string representing the blueprint.
  */
-function createBlueprint(themeSlug, branch) {
-    (0, core_1.debug)(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}`);
+function createBlueprint(themeSlug, branch, repo, themeDir) {
+    (0, core_1.debug)(`Creating blueprint for themeSlug: ${themeSlug}, branch: ${branch}, repo: ${repo}${themeDir ? `, themeDir: ${themeDir}` : ''}`);
+    /* If themeDir is not provided, we assume that the action is running in a single theme workflow and the theme folder name will be the theme slug + the branch name.
+     * If themeDir is provided, we assume that the action is running in a multi theme workflow and the theme folder name will be the theme slug.
+     */
+    const themeFolderName = !themeDir ? `${themeSlug}-${branch}` : themeSlug;
+    (0, core_1.debug)(`Theme folder name: ${themeFolderName}`);
     const template = {
         steps: [
             {
@@ -29218,15 +29240,25 @@ function createBlueprint(themeSlug, branch) {
                 password: 'password',
             },
             {
+                step: 'installPlugin',
+                pluginZipFile: {
+                    resource: 'wordpress.org/plugins',
+                    slug: 'theme-check',
+                },
+                options: {
+                    activate: true,
+                },
+            },
+            {
                 step: 'installTheme',
                 themeZipFile: {
                     resource: 'url',
-                    url: `https://github-proxy.com/proxy.php?action=partial&repo=Automattic/themes&directory=${themeSlug}&branch=${branch}`,
+                    url: buildProxyURL(repo, branch, themeDir),
                 },
             },
             {
                 step: 'activateTheme',
-                themeFolderName: themeSlug,
+                themeFolderName,
             },
         ],
     };
@@ -29235,12 +29267,27 @@ function createBlueprint(themeSlug, branch) {
     return blueprint;
 }
 /*
+ * This function gets the theme slug from the style.css file.
+ *
+ * @param {string} themeDir - The directory of the theme.
+ * @returns {string} - The theme slug.
+ */
+function getThemeSlugFromStylesheet(themeDir) {
+    const stylesheet = node_fs_1.default.readFileSync(node_path_1.default.join(themeDir, 'style.css'), 'utf8');
+    const themeSlug = stylesheet.match(/Text Domain:\s*(.*)/)?.[1]?.trim();
+    if (!themeSlug) {
+        (0, core_1.debug)(`Theme slug not found in ${themeDir}/style.css`);
+        return (0, core_1.getInput)('theme-slug');
+    }
+    return themeSlug;
+}
+/*
  * This function creates a comment on a PR with preview links for the changed themes.
  * It is used by `preview-theme` workflow.
  *
  * @param {ReturnType<typeof getOctokit>} github - An authenticated instance of the GitHub API.
  * @param {Context} context - The context of the event that triggered the action.
- * @param {string} changedThemeSlugs - A comma-separated string of theme slugs that have changed.
+ * @param {Record<string, string>} changedThemes - An object with the theme name as the key and the theme directory as the value.
  */
 async function createPreviewLinksComment(github, context, changedThemes) {
     (0, core_1.debug)('Starting createPreviewLinksComment');
@@ -29250,23 +29297,36 @@ async function createPreviewLinksComment(github, context, changedThemes) {
         throw new Error('No pull request found in context payload');
     }
     (0, core_1.debug)(`Pull request found: #${pullRequest.number}`);
-    (0, core_1.debug)(`Changed themes: ${changedThemes}`);
-    const previewLinks = Object.entries(changedThemes)
-        .map(([themeName, themeDir]) => {
-        const themeSlug = themeDir.split('/')[0].trim();
-        const parentThemeSlug = themeName.split('_childof_')[1];
-        return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref)})${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
-    })
-        .join('\n');
+    const repo = `${context.repo.owner}/${context.repo.repo}`;
+    const isSingleTheme = (0, core_1.getInput)('single-theme') === 'true';
+    let previewLinks = '';
+    if (isSingleTheme) {
+        (0, core_1.debug)(`Theme dir: ${(0, core_1.getInput)('theme-dir')}`);
+        const themeDir = (0, core_1.getInput)('theme-dir');
+        const themeSlug = getThemeSlugFromStylesheet(themeDir);
+        previewLinks = `- [Preview changes for **${themeSlug}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref, repo)})`;
+    }
+    else {
+        (0, core_1.debug)(`Changed themes: ${changedThemes}`);
+        previewLinks = Object.entries(changedThemes)
+            .map(([themeName, themeDir]) => {
+            const themeSlug = getThemeSlugFromStylesheet(themeDir);
+            const parentThemeSlug = themeName.split('_childof_')[1];
+            return `- [Preview changes for **${themeName.split('_childof_')[0]}**](https://playground.wordpress.net/#${createBlueprint(themeSlug, pullRequest.head.ref, repo, themeSlug)}${parentThemeSlug ? ` (child of **${parentThemeSlug}**)` : ''}`;
+        })
+            .join('\n');
+    }
     (0, core_1.debug)(`Preview links generated: ${previewLinks}`);
     const includesChildThemes = previewLinks.includes('child of');
     (0, core_1.debug)(`Includes child themes: ${includesChildThemes}`);
+    const themesMessage = !isSingleTheme
+        ? `I've detected changes to the following themes in this PR: ${Object.keys(changedThemes)
+            .map((themeName) => themeName.split('_childof_')[0])
+            .join(', ')}.
+	`
+        : '';
     const comment = `
-I've detected changes to the following themes in this PR: ${Object.keys(changedThemes)
-        .map((themeName) => themeName.split('_childof_')[0])
-        .join(', ')}.
-
-You can preview these changes by following the links below:
+${themesMessage}You can preview these changes by following the ${isSingleTheme ? 'link' : 'links'} below:
 
 ${previewLinks}
 
@@ -29384,18 +29444,11 @@ var __importStar = (this && this.__importStar) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.detectThemeChanges = void 0;
-const node_child_process_1 = __nccwpck_require__(7718);
 const fs = __importStar(__nccwpck_require__(7561));
 const path = __importStar(__nccwpck_require__(9411));
 const readline = __importStar(__nccwpck_require__(1747));
 const core_1 = __nccwpck_require__(2186);
 const github_1 = __nccwpck_require__(5438);
-function runCommand(command) {
-    (0, core_1.debug)(`Running command: ${command}`);
-    const result = (0, node_child_process_1.execSync)(command, { encoding: 'utf-8' }).trim();
-    (0, core_1.debug)(`Command result: ${result}`);
-    return result;
-}
 async function getChangedFiles() {
     const ref = (0, core_1.getInput)('ref', { required: true });
     const baseBranch = (0, core_1.getInput)('base-branch', { required: true });
@@ -29489,10 +29542,19 @@ async function getUniqueDirs(changedFiles) {
     }
     return uniqueDirs;
 }
-async function detectThemeChanges() {
+async function detectThemeChanges(isSingleTheme, themeDir) {
     (0, core_1.debug)('Detecting theme changes');
     const changedFiles = await getChangedFiles();
     (0, core_1.debug)(`Changed files: ${JSON.stringify(changedFiles)}`);
+    if (isSingleTheme && themeDir) {
+        (0, core_1.debug)('Single theme mode: checking for any changes');
+        const hasThemeChanges = changedFiles.length > 0;
+        (0, core_1.debug)(`Has theme changes: ${hasThemeChanges}`);
+        return {
+            hasThemeChanges,
+            changedThemes: hasThemeChanges ? { [themeDir]: themeDir } : {},
+        };
+    }
     const uniqueDirs = await getUniqueDirs(changedFiles);
     (0, core_1.debug)(`Unique dirs: ${JSON.stringify(uniqueDirs)}`);
     if (Object.keys(uniqueDirs).length === 0) {
@@ -29529,6 +29591,8 @@ async function run() {
         (0, core_1.debug)('GitHub token obtained');
         const octokit = (0, github_1.getOctokit)(token);
         (0, core_1.debug)('Octokit client initialized');
+        const isSingleTheme = (0, core_1.getInput)('single-theme', { required: false }) === 'true';
+        const themeDir = (0, core_1.getInput)('theme-dir', { required: false });
         // Get org and repo names from context
         const { eventName } = github_1.context;
         (0, core_1.debug)(`Event name: ${eventName}`);
@@ -29539,7 +29603,7 @@ async function run() {
         }
         // Get the changed themes
         (0, core_1.debug)('Detecting theme changes');
-        const { hasThemeChanges, changedThemes } = await (0, get_changed_themes_1.detectThemeChanges)();
+        const { hasThemeChanges, changedThemes } = await (0, get_changed_themes_1.detectThemeChanges)(isSingleTheme, themeDir);
         (0, core_1.debug)(`Theme changes detected: ${hasThemeChanges}`);
         if (!hasThemeChanges) {
             (0, core_1.debug)('No theme changes');
@@ -29656,14 +29720,6 @@ module.exports = require("https");
 
 "use strict";
 module.exports = require("net");
-
-/***/ }),
-
-/***/ 7718:
-/***/ ((module) => {
-
-"use strict";
-module.exports = require("node:child_process");
 
 /***/ }),
 

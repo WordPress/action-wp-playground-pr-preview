@@ -14,6 +14,8 @@ This GitHub Action allows you to preview WordPress themes in a playground enviro
 
 To use this action in your repo, add the following step:
 
+1. For repositories that include multiple themes, assuming that themes are each stored in their own directory at the root of the project:
+
 ```yml
 preview-theme:
   runs-on: ubuntu-latest
@@ -29,6 +31,37 @@ preview-theme:
         github-token: <your github token>
         base-branch: <your base branch name>
 ```
+
+2. For repositories that contain a single theme:
+
+```yml
+preview-theme-changes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Preview Theme Changes
+        uses: vcanales/action-wp-playground-pr-preview@1fce1282c929f149229dba67c572968746205417
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          base-branch: trunk
+          single-theme: true
+```
+
+## All configurable inputs
+
+| Name | Description | Required | Default Value |
+|------|-------------|----------|---------------|
+| `github-token` | GitHub token for authentication | Yes | N/A |
+| `ref` | git ref SHA (commit hash) to compare against the base branch | Yes | `HEAD` |
+| `base-branch` | The branch to compare against | Yes | `main` |
+| `single-theme` | Whether the repository contains a single theme | No | `false` |
+| `theme-dir` | The directory where themes are stored | No | `.` |
+
 
 ## Development
 

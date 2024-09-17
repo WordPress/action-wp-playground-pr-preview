@@ -12,6 +12,10 @@ export async function run() {
 		const octokit = getOctokit(token);
 		debug('Octokit client initialized');
 
+		const isSingleTheme =
+			getInput('single-theme', { required: false }) === 'true';
+		const themeDir = getInput('theme-dir', { required: false });
+
 		// Get org and repo names from context
 		const { eventName } = context;
 		debug(`Event name: ${eventName}`);
@@ -24,7 +28,10 @@ export async function run() {
 
 		// Get the changed themes
 		debug('Detecting theme changes');
-		const { hasThemeChanges, changedThemes } = await detectThemeChanges();
+		const { hasThemeChanges, changedThemes } = await detectThemeChanges(
+			isSingleTheme,
+			themeDir,
+		);
 		debug(`Theme changes detected: ${hasThemeChanges}`);
 
 		if (!hasThemeChanges) {
