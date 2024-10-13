@@ -15,11 +15,15 @@ inputs:
   single-theme:
     description: 'Whether the repository contains a single theme'
     required: false
-    default: "false"
+    default: 'false'
   theme-dir:
     description: 'The directory themes are stored'
     required: false
-    default: "."
+    default: '.'
+  wp-version:
+    description: WordPress version
+    required: false
+    default: 'nightly'
 runs:
   using: 'node20'
   main: 'dist/index.js'
