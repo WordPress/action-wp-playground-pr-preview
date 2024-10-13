@@ -26,8 +26,14 @@ interface Step {
 	};
 }
 
-interface Template {
+interface Blueprint {
+	landingPage?: string;
+	preferredVersions?: {
+		wp?: string;
+		php?: string;
+	};
 	steps: Step[];
+	resources?: Record<string, string>;
 }
 
 export const COMMENT_BLOCK_START = '### Preview changes';
@@ -69,7 +75,11 @@ function createBlueprint(
 	 */
 	const themeFolderName = !themeDir ? `${themeSlug}-${branch}` : themeSlug;
 	debug(`Theme folder name: ${themeFolderName}`);
-	const template: Template = {
+	const wpVersion = getInput('wp-version');
+	const template: Blueprint = {
+		preferredVersions: {
+			wp: wpVersion ?? 'nightly',
+		},
 		steps: [
 			{
 				step: 'login',
@@ -91,6 +101,9 @@ function createBlueprint(
 				themeZipFile: {
 					resource: 'url',
 					url: buildProxyURL(repo, branch, themeDir),
+				},
+				options: {
+					activate: true,
 				},
 			},
 			{
