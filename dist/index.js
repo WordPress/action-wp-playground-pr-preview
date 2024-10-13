@@ -29232,7 +29232,11 @@ function createBlueprint(themeSlug, branch, repo, themeDir) {
      */
     const themeFolderName = !themeDir ? `${themeSlug}-${branch}` : themeSlug;
     (0, core_1.debug)(`Theme folder name: ${themeFolderName}`);
+    const wpVersion = (0, core_1.getInput)('wp-version');
     const template = {
+        preferredVersions: {
+            wp: wpVersion ?? 'nightly',
+        },
         steps: [
             {
                 step: 'login',
@@ -29254,6 +29258,9 @@ function createBlueprint(themeSlug, branch, repo, themeDir) {
                 themeZipFile: {
                     resource: 'url',
                     url: buildProxyURL(repo, branch, themeDir),
+                },
+                options: {
+                    activate: true,
                 },
             },
             {
