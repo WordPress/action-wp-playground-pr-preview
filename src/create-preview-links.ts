@@ -4,12 +4,12 @@ import { debug, getInput } from '@actions/core';
 import type { getOctokit } from '@actions/github';
 import type { Context } from '@actions/github/lib/context';
 
-interface ThemeZipFile {
+interface ThemeData {
 	resource: string;
 	url: string;
 }
 
-interface PluginZipFile {
+interface PluginData {
 	resource: string;
 	slug: string;
 }
@@ -18,8 +18,8 @@ interface Step {
 	step: string;
 	username?: string;
 	password?: string;
-	themeZipFile?: ThemeZipFile;
-	pluginZipFile?: PluginZipFile;
+	themeData?: ThemeData;
+	pluginData?: PluginData;
 	themeFolderName?: string;
 	options?: {
 		activate?: boolean;
@@ -78,7 +78,7 @@ function createBlueprint(
 			},
 			{
 				step: 'installPlugin',
-				pluginZipFile: {
+				pluginData: {
 					resource: 'wordpress.org/plugins',
 					slug: 'theme-check',
 				},
@@ -88,14 +88,13 @@ function createBlueprint(
 			},
 			{
 				step: 'installTheme',
-				themeZipFile: {
+				themeData: {
 					resource: 'url',
 					url: buildProxyURL(repo, branch, themeDir),
 				},
-			},
-			{
-				step: 'activateTheme',
-				themeFolderName,
+				options: {
+					activate: true,
+				},
 			},
 		],
 	};
