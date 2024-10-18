@@ -117,7 +117,9 @@ You can preview these changes by following the links below:
 - [Preview changes for **theme1**](https://playground.wordpress.net/#{"steps":[{"step":"login","username":"admin","password":"password"},{"step":"installTheme","themeZipFile":{"resource":"url","url":"https://github-proxy.com/proxy.php?action=partial&repo=Automattic/themes&directory=dir1&branch=branch-name"}},{"step":"activateTheme","themeFolderName":"dir1"}]})
 
 I will update this comment with the latest preview links as you push more changes to this PR.
-**⚠️ Note:** The preview sites are created using [WordPress Playground](https://wordpress.org/playground/). You can add content, edit settings, and test the themes as you would on a real site, but please note that changes are not saved between sessions.
+
+> [!NOTE]
+> The preview sites are created using [WordPress Playground](https://wordpress.org/playground/). You can add content, edit settings, and test the themes as you would on a real site, but please note that changes are not saved between sessions.
 `;
 
 		expect(mockGithub.rest.issues.createComment).toHaveBeenCalledWith({

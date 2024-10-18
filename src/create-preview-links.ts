@@ -214,10 +214,12 @@ ${themesMessage}You can preview these changes by following the ${isSingleTheme ?
 ${previewLinks}
 
 I will update this comment with the latest preview links as you push more changes to this PR.
-**⚠️ Note:** The preview sites are created using [WordPress Playground](https://wordpress.org/playground/). You can add content, edit settings, and test the themes as you would on a real site, but please note that changes are not saved between sessions.
+
+> [!NOTE]
+> The preview sites are created using [WordPress Playground](https://wordpress.org/playground/). You can add content, edit settings, and test the themes as you would on a real site, but please note that changes are not saved between sessions.
 ${
 	includesChildThemes
-		? '\n**⚠️ Note:** Child themes are dependent on their parent themes. You will have to install the parent theme as well for the preview to work correctly.'
+		? '> Child themes are dependent on their parent themes. You will have to install the parent theme as well for the preview to work correctly.'
 		: ''
 }`;
 
