@@ -27,6 +27,10 @@ interface Step {
 }
 
 interface Template {
+	preferredVersions?: {
+		php?: string;
+		wp?: string;
+	};
 	steps: Step[];
 }
 
@@ -72,7 +76,17 @@ function createBlueprint(
 		? `${themeSlug}-${sanitizedBranch}`
 		: themeSlug;
 	debug(`Theme folder name: ${themeFolderName}`);
+
+	const wpVersion = getInput('wp-version');
+	const phpVersion = getInput('php-version');
+
+	const preferredVersions = {
+		...(wpVersion && { wp: wpVersion }),
+		...(phpVersion && { php: Number(phpVersion).toFixed(1) }),
+	};
+
 	const template: Template = {
+		preferredVersions,
 		steps: [
 			{
 				step: 'login',

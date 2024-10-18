@@ -61,7 +61,8 @@ preview-theme-changes:
 | `base-branch` | The branch to compare against | Yes | `main` |
 | `single-theme` | Whether the repository contains a single theme | No | `false` |
 | `theme-dir` | The directory where themes are stored | No | `.` |
-
+| `wp-version` | The WordPress version to use | No | `` |
+| `php-version` | The PHP version to use | No | `` |
 
 ## Development
 
