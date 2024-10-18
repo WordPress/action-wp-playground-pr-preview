@@ -4,7 +4,7 @@ inputs:
   github-token:
     description: 'GitHub token'
     required: true
-  ref: 
+  ref:
     description: 'git ref SHA'
     required: true
     default: 'HEAD'
@@ -20,6 +20,14 @@ inputs:
     description: 'The directory themes are stored'
     required: false
     default: "."
+  wp-version:
+    description: 'The WordPress version to use'
+    required: false
+    default: ""
+  php-version:
+    description: 'The PHP version to use'
+    required: false
+    default: ""
 runs:
   using: 'node20'
   main: 'dist/index.js'
