@@ -81,7 +81,7 @@ function createBlueprint(
 	};
 
 	const template: Template = {
-		preferredVersions,
+		...(Object.keys(preferredVersions).length && { preferredVersions }),
 		steps: [
 			{
 				step: 'login',
@@ -155,7 +155,11 @@ export default async function createPreviewLinksComment(
 
 	debug(`Pull request found: #${pullRequest.number}`);
 
-	const repo = `${context.repo.owner}/${context.repo.repo}`;
+	const isFork = pullRequest.head.repo?.fork;
+
+	const repo = isFork
+		? `${pullRequest.head.repo.owner.login}/${pullRequest.head.repo.name}`
+		: `${context.repo.owner}/${context.repo.repo}`;
 
 	const isSingleTheme = getInput('single-theme') === 'true';
 	let previewLinks = '';

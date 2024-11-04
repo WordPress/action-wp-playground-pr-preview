@@ -29231,11 +29231,6 @@ function createBlueprint(themeSlug, branch, repo, themeDir) {
     /* If themeDir is not provided, we assume that the action is running in a single theme workflow and the theme folder name will be the theme slug + the branch name.
      * If themeDir is provided, we assume that the action is running in a multi theme workflow and the theme folder name will be the theme slug.
      */
-    const sanitizedBranch = branch.replace(/[\/\\:*?"<>|]/g, '-');
-    const themeFolderName = !themeDir
-        ? `${themeSlug}-${sanitizedBranch}`
-        : themeSlug;
-    (0, core_1.debug)(`Theme folder name: ${themeFolderName}`);
     const wpVersion = (0, core_1.getInput)('wp-version');
     const phpVersion = (0, core_1.getInput)('php-version');
     const preferredVersions = {
@@ -29243,7 +29238,7 @@ function createBlueprint(themeSlug, branch, repo, themeDir) {
         ...(phpVersion && { php: Number(phpVersion).toFixed(1) }),
     };
     const template = {
-        preferredVersions,
+        ...(Object.keys(preferredVersions).length && { preferredVersions }),
         steps: [
             {
                 step: 'login',
@@ -29307,7 +29302,10 @@ async function createPreviewLinksComment(github, context, changedThemes) {
         throw new Error('No pull request found in context payload');
     }
     (0, core_1.debug)(`Pull request found: #${pullRequest.number}`);
-    const repo = `${context.repo.owner}/${context.repo.repo}`;
+    const isFork = pullRequest.head.repo?.fork;
+    const repo = isFork
+        ? `${pullRequest.head.repo.owner.login}/${pullRequest.head.repo.name}`
+        : `${context.repo.owner}/${context.repo.repo}`;
     const isSingleTheme = (0, core_1.getInput)('single-theme') === 'true';
     let previewLinks = '';
     if (isSingleTheme) {
