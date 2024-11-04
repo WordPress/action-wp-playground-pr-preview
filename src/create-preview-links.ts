@@ -82,7 +82,6 @@ function createBlueprint(
 
 	const template: Template = {
 		...(Object.keys(preferredVersions).length && { preferredVersions }),
-		preferredVersions,
 		steps: [
 			{
 				step: 'login',
