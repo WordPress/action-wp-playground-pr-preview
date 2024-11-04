@@ -29239,7 +29239,6 @@ function createBlueprint(themeSlug, branch, repo, themeDir) {
     };
     const template = {
         ...(Object.keys(preferredVersions).length && { preferredVersions }),
-        preferredVersions,
         steps: [
             {
                 step: 'login',
