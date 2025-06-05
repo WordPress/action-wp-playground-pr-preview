@@ -55,7 +55,7 @@
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.3",
 		"@jest/globals": "^29.7.0",
-		"@octokit/rest": "^20.1.1",
+		"@octokit/rest": "^22.0.0",
 		"@types/jest": "^29.5.13",
 		"@types/node": "^20.12.12",
 		"@typescript-eslint/eslint-plugin": "^7.9.0",
