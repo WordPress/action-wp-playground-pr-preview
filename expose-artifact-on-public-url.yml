@@ -1,163 +1,50 @@
 name: Expose Build Artifact on a Public URL
-
-# ============================================================================
-# REUSABLE WORKFLOW: Expose built artifacts on a public URL
-# ============================================================================
-#
-# This workflow exposes built artifacts on a public URL. It helps WordPress
-# Playground preview CI artifacts that are normally not accessible via a public URL.
-# 
-# Under the hood, id uses the GitHub releases feature. It creates a single public 
-# draft release and uploads all the handled artifacts to that release. Note this
-# means **one technical release in total**, not one per handled PR.
-#
-# This workflow also automatically cleans up old artifacts for the same PR, keeping
-# only the N most recent.
-#
-# USAGE EXAMPLE:
-#
-#   # Required permissions
-#   permissions:
-#     contents: write
-#
-#   on:
-#     pull_request:
-#       types: [opened, synchronize, reopened, edited]
-#
-#   jobs:
-#     # This workflow, configured to expose a specific per-PR artifact on a public URL:
-#     expose-build-publicly:
-#       needs: build  # Run your build job first
-#       permissions:
-#         contents: write  # Required!
-#       uses: ./.github/workflows/expose-artifact-on-public-url.yml
-#       with:
-#         artifact-name: 'built-plugin'
-#         pr-number: PULL_REQUEST_NUMBER
-#         commit-sha: COMMIT_SHA
-#         artifacts-to-keep: '2'  # Optional, defaults to 2
-#
-#     # Your build job that creates the artifact in the CI:
-#     build:
-#       runs-on: ubuntu-latest
-#       steps:
-#         - uses: actions/checkout@v4
-#         - name: Build
-#           run: |
-#             npm run build
-#             zip -r plugin.zip dist/
-#         - uses: actions/upload-artifact@v4
-#           with:
-#             name: built-plugin
-#             path: plugin.zip
-#
-# HOW IT WORKS:
-#   1. Downloads the GitHub Actions artifact from the build job
-#   2. Uploads to release with name: pr-{number}-{sha}.zip
-#   3. Gets all artifacts for this PR from the release
-#   4. Sorts by timestamp (newest first)
-#   5. Keeps N most recent, deletes the rest
-#   6. Returns public download URL
-#
-# For actual usage with GitHub context variables, see:
-# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
-#
-# ============================================================================
+description: Exposes build artifacts on a public URL via GitHub releases for WordPress Playground preview access
 
 on:
   workflow_call:
     inputs:
       artifact-name:
-        description: |
-          Name of the GitHub Actions artifact to expose on a public URL
-
-          This should match the name used in actions/upload-artifact@v4 in the build job.
-          The artifact should contain a single zip file.
-
-          Some artifacts have dynamic names, e.g. built-plugin-$\{{ github.event.pull_request.number }}-$\{{ github.sha }}.
-          You can use the same syntax to format the artifact-name for this job.
-
-          Example: 'built-plugin'
+        description: Name of the GitHub Actions artifact to expose (should match upload-artifact name)
         required: true
         type: string
 
       artifact-filename:
-        description: |
-          Filename of the zip file inside the GitHub Actions artifact (default: 'plugin.zip')
-
-          This should match the actual filename of the zip in your artifact.
-
-          Example: 'plugin.zip' or 'theme.zip'
+        description: Filename of the zip file inside the artifact
         required: false
         type: string
         default: 'plugin.zip'
 
       pr-number:
-        description: |
-          Pull request number for unique artifact naming
-
-          Used to create artifacts named: pr-{THIS_NUMBER}-{sha}.zip
-          Also used to find and clean up other artifacts for the same PR.
-
-          Pass: github.event.pull_request.number
+        description: Pull request number (e.g., `github.event.pull_request.number`)
         required: true
         type: string
 
       commit-sha:
-        description: |
-          Commit SHA for unique artifact naming
-
-          Used to create artifacts named: pr-{number}-{THIS_SHA}.zip
-          Ensures each commit gets a unique artifact even if built multiple times.
-
-          Pass: github.sha
+        description: Commit SHA for unique artifact naming (e.g., `github.sha`)
         required: true
         type: string
 
       artifacts-to-keep:
-        description: |
-          Number of most recent artifacts to keep for this PR (default: 2)
-
-          After exposing a new artifact, this workflow automatically deletes older
-          artifacts for the same PR, keeping only the N most recent. Use `keep-all`
-          to keep all the artifacts.
-
-          Example: '2'.
+        description: Number of most recent artifacts to keep for this PR (use `keep-all` to keep all)
         required: false
         type: string
         default: '2'
 
       release-tag:
-        description: |
-          GitHub release tag to expose artifacts on a public URL (default: 'ci-artifacts')
-
-          The release with this tag must already exist. Create it with:
-            gh release create ci-artifacts --title "CI Artifacts" --prerelease
-
-          Using a dedicated release keeps your main releases clean while providing
-          public URLs for PR artifacts.
-
-          Example: 'ci-artifacts'
+        description: GitHub release tag to use (must already exist)
         required: false
         type: string
         default: 'ci-artifacts'
 
     outputs:
       artifact-url:
-        description: |
-          Public download URL for the exposed artifact
-
-          Format: https://github.com/OWNER/REPO/releases/download/TAG/pr-NUMBER-SHA.zip
-          This URL can be used directly in Playground blueprints or shared publicly.
-        value: ${{ jobs.expose-build-artifact-publicly.outputs.artifact-url }}
+        description: Public download URL for the exposed artifact
+        value: ${{ jobs.expose-build-artifact-on-public-url.outputs.artifact-url }}
 
       artifact-name:
-        description: |
-          Filename of the exposed artifact
-
-          Format: pr-NUMBER-SHA.zip
-          Useful for logging or debugging purposes.
-        value: ${{ jobs.expose-build-artifact-publicly.outputs.artifact-name }}
+        description: Filename of the exposed artifact (format: pr-NUMBER-SHA.zip)
+        value: ${{ jobs.expose-build-artifact-on-public-url.outputs.artifact-name }}
 
 jobs:
   expose-build-artifact-on-public-url:
