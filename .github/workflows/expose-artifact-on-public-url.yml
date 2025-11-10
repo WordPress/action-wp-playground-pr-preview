@@ -43,7 +43,7 @@ on:
         value: ${{ jobs.expose-build-artifact-on-public-url.outputs.artifact-url }}
 
       artifact-name:
-        description: Filename of the exposed artifact (format: pr-NUMBER-SHA.zip)
+        description: "Filename of the exposed artifact (format: pr-NUMBER-SHA.zip)"
         value: ${{ jobs.expose-build-artifact-on-public-url.outputs.artifact-name }}
 
 jobs:
