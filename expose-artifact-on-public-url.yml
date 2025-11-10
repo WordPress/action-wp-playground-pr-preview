@@ -1,0 +1,254 @@
+name: Expose Build Artifact on a Public URL
+
+# ============================================================================
+# REUSABLE WORKFLOW: Expose built artifacts on a public URL
+# ============================================================================
+#
+# This workflow exposes built artifacts on a public URL. It helps WordPress
+# Playground preview CI artifacts that are normally not accessible via a public URL.
+# 
+# Under the hood, id uses the GitHub releases feature. It creates a single public 
+# draft release and uploads all the handled artifacts to that release. Note this
+# means **one technical release in total**, not one per handled PR.
+#
+# This workflow also automatically cleans up old artifacts for the same PR, keeping
+# only the N most recent.
+#
+# USAGE EXAMPLE:
+#
+#   # Required permissions
+#   permissions:
+#     contents: write
+#
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened, edited]
+#
+#   jobs:
+#     # This workflow, configured to expose a specific per-PR artifact on a public URL:
+#     expose-build-publicly:
+#       needs: build  # Run your build job first
+#       permissions:
+#         contents: write  # Required!
+#       uses: ./.github/workflows/expose-artifact-on-public-url.yml
+#       with:
+#         artifact-name: 'built-plugin'
+#         pr-number: PULL_REQUEST_NUMBER
+#         commit-sha: COMMIT_SHA
+#         artifacts-to-keep: '2'  # Optional, defaults to 2
+#
+#     # Your build job that creates the artifact in the CI:
+#     build:
+#       runs-on: ubuntu-latest
+#       steps:
+#         - uses: actions/checkout@v4
+#         - name: Build
+#           run: |
+#             npm run build
+#             zip -r plugin.zip dist/
+#         - uses: actions/upload-artifact@v4
+#           with:
+#             name: built-plugin
+#             path: plugin.zip
+#
+# HOW IT WORKS:
+#   1. Downloads the GitHub Actions artifact from the build job
+#   2. Uploads to release with name: pr-{number}-{sha}.zip
+#   3. Gets all artifacts for this PR from the release
+#   4. Sorts by timestamp (newest first)
+#   5. Keeps N most recent, deletes the rest
+#   6. Returns public download URL
+#
+# For actual usage with GitHub context variables, see:
+# https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions
+#
+# ============================================================================
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: |
+          Name of the GitHub Actions artifact to expose on a public URL
+
+          This should match the name used in actions/upload-artifact@v4 in the build job.
+          The artifact should contain a single zip file.
+
+          Some artifacts have dynamic names, e.g. built-plugin-$\{{ github.event.pull_request.number }}-$\{{ github.sha }}.
+          You can use the same syntax to format the artifact-name for this job.
+
+          Example: 'built-plugin'
+        required: true
+        type: string
+
+      artifact-filename:
+        description: |
+          Filename of the zip file inside the GitHub Actions artifact (default: 'plugin.zip')
+
+          This should match the actual filename of the zip in your artifact.
+
+          Example: 'plugin.zip' or 'theme.zip'
+        required: false
+        type: string
+        default: 'plugin.zip'
+
+      pr-number:
+        description: |
+          Pull request number for unique artifact naming
+
+          Used to create artifacts named: pr-{THIS_NUMBER}-{sha}.zip
+          Also used to find and clean up other artifacts for the same PR.
+
+          Pass: github.event.pull_request.number
+        required: true
+        type: string
+
+      commit-sha:
+        description: |
+          Commit SHA for unique artifact naming
+
+          Used to create artifacts named: pr-{number}-{THIS_SHA}.zip
+          Ensures each commit gets a unique artifact even if built multiple times.
+
+          Pass: github.sha
+        required: true
+        type: string
+
+      artifacts-to-keep:
+        description: |
+          Number of most recent artifacts to keep for this PR (default: 2)
+
+          After exposing a new artifact, this workflow automatically deletes older
+          artifacts for the same PR, keeping only the N most recent. Use `keep-all`
+          to keep all the artifacts.
+
+          Example: '2'.
+        required: false
+        type: string
+        default: '2'
+
+      release-tag:
+        description: |
+          GitHub release tag to expose artifacts on a public URL (default: 'ci-artifacts')
+
+          The release with this tag must already exist. Create it with:
+            gh release create ci-artifacts --title "CI Artifacts" --prerelease
+
+          Using a dedicated release keeps your main releases clean while providing
+          public URLs for PR artifacts.
+
+          Example: 'ci-artifacts'
+        required: false
+        type: string
+        default: 'ci-artifacts'
+
+    outputs:
+      artifact-url:
+        description: |
+          Public download URL for the exposed artifact
+
+          Format: https://github.com/OWNER/REPO/releases/download/TAG/pr-NUMBER-SHA.zip
+          This URL can be used directly in Playground blueprints or shared publicly.
+        value: ${{ jobs.expose-build-artifact-publicly.outputs.artifact-url }}
+
+      artifact-name:
+        description: |
+          Filename of the exposed artifact
+
+          Format: pr-NUMBER-SHA.zip
+          Useful for logging or debugging purposes.
+        value: ${{ jobs.expose-build-artifact-publicly.outputs.artifact-name }}
+
+jobs:
+  expose-build-artifact-on-public-url:
+    name: Expose Build Artifact on a Public URL and Cleanup
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to expose assets on a public URL
+    outputs:
+      artifact-url: ${{ steps.expose-build-artifact-on-public-url.outputs.url }}
+      artifact-name: ${{ steps.expose-build-artifact-on-public-url.outputs.name }}
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+
+      - name: Upload artifact to release
+        id: expose-build-artifact-on-public-url
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          COMMIT_SHA: ${{ inputs.commit-sha }}
+          ARTIFACT_FILENAME: ${{ inputs.artifact-filename }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          # Create unique filename for this PR and commit
+          ARTIFACT_NAME="pr-${PR_NUMBER}-${COMMIT_SHA}.zip"
+
+          # Rename the downloaded artifact
+          mv "$ARTIFACT_FILENAME" "$ARTIFACT_NAME"
+
+          # Upload to the release
+          echo "Uploading $ARTIFACT_NAME to $RELEASE_TAG release..."
+          gh release upload "$RELEASE_TAG" "$ARTIFACT_NAME" \
+            --repo ${{ github.repository }} \
+            --clobber
+
+          # Get the download URL
+          ARTIFACT_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/${ARTIFACT_NAME}"
+
+          echo "name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "url=$ARTIFACT_URL" >> $GITHUB_OUTPUT
+          echo "Artifact uploaded to: $ARTIFACT_URL"
+
+      - name: Cleanup old artifacts for this PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          ARTIFACTS_TO_KEEP: ${{ inputs.artifacts-to-keep }}
+          RELEASE_TAG: ${{ inputs.release-tag }}
+        run: |
+          echo "Cleaning up old artifacts for PR #$PR_NUMBER (keeping $ARTIFACTS_TO_KEEP most recent)"
+
+          # Check if cleanup is enabled
+          if [ "$ARTIFACTS_TO_KEEP" = "keep-all" ]; then
+            echo "ARTIFACTS_TO_KEEP=keep-all, keeping all artifacts for this PR"
+            exit 0
+          fi
+
+          # Get all artifacts for this PR with timestamps
+          gh release view "$RELEASE_TAG" --json assets \
+            --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.created_at)|\(.name)\"" \
+            > pr-artifacts.txt || true
+
+          if [ ! -s pr-artifacts.txt ]; then
+            echo "No existing artifacts found for PR #$PR_NUMBER"
+            exit 0
+          fi
+
+          ARTIFACT_COUNT=$(wc -l < pr-artifacts.txt | tr -d ' ')
+          echo "Found $ARTIFACT_COUNT total artifact(s) for PR #$PR_NUMBER"
+
+          # If we have fewer artifacts than the limit, nothing to delete
+          if [ "$ARTIFACT_COUNT" -le "$ARTIFACTS_TO_KEEP" ]; then
+            echo "Artifact count ($ARTIFACT_COUNT) is within limit ($ARTIFACTS_TO_KEEP), no cleanup needed"
+            exit 0
+          fi
+
+          # Sort by timestamp (newest first)
+          sort -r pr-artifacts.txt > pr-artifacts-sorted.txt
+
+          # Process artifacts: keep first N, delete rest
+          CURRENT=0
+          while IFS='|' read -r timestamp artifact; do
+            CURRENT=$((CURRENT + 1))
+            if [ $CURRENT -le $ARTIFACTS_TO_KEEP ]; then
+              echo "Keeping: $artifact (artifact $CURRENT of $ARTIFACTS_TO_KEEP)"
+            else
+              echo "Deleting: $artifact (old artifact #$CURRENT)"
+              gh release delete-asset "$RELEASE_TAG" "$artifact" --yes || echo "Failed to delete $artifact"
+            fi
+          done < pr-artifacts-sorted.txt
+
+          echo "Cleanup complete for PR #$PR_NUMBER"
