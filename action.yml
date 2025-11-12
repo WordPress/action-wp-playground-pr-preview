@@ -40,21 +40,18 @@ secrets:
 
 runs:
   using: 'node20'
-  env:
-    INPUT_PREVIEW_MODE: ${{ inputs.mode }}
-    INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
-    INPUT_BLUEPRINT: ${{ inputs.blueprint }}
-    INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
-    INPUT_THEME_PATH: ${{ inputs.theme-path }}
-    INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
-    INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
-    INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
   main: 'dist/index.js'
 
 outputs:
-  preview-url: ${{ steps.preview.outputs.preview-url }}
-  blueprint-json: ${{ steps.preview.outputs.blueprint-json }}
-  rendered-description: ${{ steps.preview.outputs.rendered-description }}
-  rendered-comment: ${{ steps.preview.outputs.rendered-comment }}
-  mode: ${{ steps.preview.outputs.mode }}
-  comment-id: ${{ steps.preview.outputs.comment-id }}
+  preview-url:
+    description: Direct link to the generated WordPress Playground instance.
+  blueprint-json:
+    description: JSON blueprint (stringified) used for the preview.
+  rendered-description:
+    description: Markdown/HTML snippet inserted into the PR description.
+  rendered-comment:
+    description: Markdown/HTML snippet used when posting a comment.
+  mode:
+    description: Effective preview publishing mode (append-to-description or post-comment).
+  comment-id:
+    description: ID of the managed preview comment (if applicable).
