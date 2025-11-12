@@ -2,79 +2,71 @@ name: WordPress Playground Preview
 description: Automatically add a "Preview in WordPress Playground" button to your pull requests for easy testing of WordPress plugins and themes.
 
 
-on:
-  workflow_call:
-    inputs:
-      mode:
-        type: string
-        description: 'How to publish the preview button: `append-to-description` or `post-comment`'
-        default: append-to-description
-      playground-host:
-        type: string
-        description: Base WordPress Playground host URL
-        default: https://playground.wordpress.net
-      blueprint:
-        type: string
-        description: Custom WordPress Blueprint as a JSON string. When provided, `plugin-path` and `theme-path` are ignored.
-      plugin-path:
-        type: string
-        description: Path to plugin directory inside the repository (e.g., `.` for root or `plugins/my-plugin`)
-      theme-path:
-        type: string
-        description: Path to theme directory inside the repository (e.g., `.` for root or `themes/my-theme`)
-      description-template:
-        type: string
-        description: Custom markdown/HTML template for PR descriptions (supports {{VARIABLE_NAME}} interpolation)
-      comment-template:
-        type: string
-        description: Custom markdown/HTML template for PR comments (supports {{VARIABLE_NAME}} interpolation)
-      restore-button-if-removed:
-        type: boolean
-        description: Whether to restore the preview button if removed by PR author (only applies to `append-to-description` mode)
-        default: true
-    secrets:
-      github-token:
-        description: GitHub token for updating PRs (defaults to GITHUB_TOKEN). Required permissions: `pull-requests: write`, `contents: read`
-        required: false
+inputs:
+  mode:
+    type: string
+    description: 'How to publish the preview button: `append-to-description` or `post-comment`'
+    default: append-to-description
+  playground-host:
+    type: string
+    description: Base WordPress Playground host URL
+    default: https://playground.wordpress.net
+  blueprint:
+    type: string
+    description: Custom WordPress Blueprint as a JSON string. When provided, `plugin-path` and `theme-path` are ignored.
+  plugin-path:
+    type: string
+    description: Path to plugin directory inside the repository (e.g., `.` for root or `plugins/my-plugin`)
+  theme-path:
+    type: string
+    description: Path to theme directory inside the repository (e.g., `.` for root or `themes/my-theme`)
+  description-template:
+    type: string
+    description: Custom markdown/HTML template for PR descriptions (supports {{VARIABLE_NAME}} interpolation)
+  comment-template:
+    type: string
+    description: Custom markdown/HTML template for PR comments (supports {{VARIABLE_NAME}} interpolation)
+  restore-button-if-removed:
+    type: boolean
+    description: Whether to restore the preview button if removed by PR author (only applies to `append-to-description` mode)
+    default: true
 
-jobs:
-  build-preview:
-    name: Build Playground Preview
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ensure repository context
-        if: ${{ !github.event.pull_request }}
-        run: |
-          echo "This reusable workflow must be invoked from a pull_request triggered workflow."
-          exit 1
+secrets:
+  github-token:
+    description: GitHub token for updating PRs (defaults to GITHUB_TOKEN). Required permissions: `pull-requests: write`, `contents: read`
+    required: false
 
-      - name: Prepare preview content
-        id: preview
-        uses: actions/github-script@v7
-        env:
-          INPUT_PREVIEW_MODE: ${{ inputs.mode }}
-          INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
-          INPUT_BLUEPRINT: ${{ inputs.blueprint }}
-          INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
-          INPUT_THEME_PATH: ${{ inputs.theme-path }}
-          INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
-          INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
-          INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
-        with:
-          github-token: ${{ secrets.github-token != '' && secrets.github-token || github.token }}
-          result-encoding: string
-          script: |
-            const path = require('path')
-            return require(path.resolve('action.js'))({context})
+runs:
+  using: 'composite'
+  steps:
+    - name: Ensure repository context
+      if: ${{ !github.event.pull_request }}
+      run: |
+        echo "This reusable workflow must be invoked from a pull_request triggered workflow."
+        exit 1
 
-    outputs:
-      preview-url: ${{ steps.preview.outputs.preview-url }}
-      blueprint-json: ${{ steps.preview.outputs.blueprint-json }}
-      rendered-description: ${{ steps.preview.outputs.rendered-description }}
-      rendered-comment: ${{ steps.preview.outputs.rendered-comment }}
-      mode: ${{ steps.preview.outputs.mode }}
-      comment-id: ${{ steps.preview.outputs.comment-id }}
+    - name: Prepare preview content
+      id: preview
+      uses: actions/github-script@v7
+      env:
+        INPUT_PREVIEW_MODE: ${{ inputs.mode }}
+        INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
+        INPUT_BLUEPRINT: ${{ inputs.blueprint }}
+        INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
+        INPUT_THEME_PATH: ${{ inputs.theme-path }}
+        INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
+        INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
+        INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
+      with:
+        github-token: ${{ secrets.github-token != '' && secrets.github-token || github.token }}
+        result-encoding: string
+        script: |
+          const path = require('path')
+          return require(path.resolve('action.js'))({context})
+  outputs:
+    preview-url: ${{ steps.preview.outputs.preview-url }}
+    blueprint-json: ${{ steps.preview.outputs.blueprint-json }}
+    rendered-description: ${{ steps.preview.outputs.rendered-description }}
+    rendered-comment: ${{ steps.preview.outputs.rendered-comment }}
+    mode: ${{ steps.preview.outputs.mode }}
+    comment-id: ${{ steps.preview.outputs.comment-id }}
