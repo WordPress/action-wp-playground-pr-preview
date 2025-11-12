@@ -33,7 +33,9 @@ inputs:
 
 secrets:
   github-token:
-    description: GitHub token for updating PRs (defaults to GITHUB_TOKEN). Required permissions: `pull-requests: write`, `contents: read`
+    description: >
+      GitHub token for updating PRs (defaults to GITHUB_TOKEN). Required permissions:
+      `pull-requests: write`, `contents: read`
     required: false
 
 runs:
