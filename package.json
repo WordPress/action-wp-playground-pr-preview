@@ -1,6 +1,0 @@
-{
-	"name": "action-wp-playground-pr-preview",
-	"scripts": {
-		"build": "mkdir -p dist; cp action.js action.yml dist/"
-	}
-}

@@ -37,36 +37,22 @@ secrets:
     required: false
 
 runs:
-  using: 'composite'
-  steps:
-    - name: Ensure repository context
-      if: ${{ !github.event.pull_request }}
-      run: |
-        echo "This reusable workflow must be invoked from a pull_request triggered workflow."
-        exit 1
+  using: 'node20'
+  env:
+    INPUT_PREVIEW_MODE: ${{ inputs.mode }}
+    INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
+    INPUT_BLUEPRINT: ${{ inputs.blueprint }}
+    INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
+    INPUT_THEME_PATH: ${{ inputs.theme-path }}
+    INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
+    INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
+    INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
+  main: 'dist/index.js'
 
-    - name: Prepare preview content
-      id: preview
-      uses: actions/github-script@v7
-      env:
-        INPUT_PREVIEW_MODE: ${{ inputs.mode }}
-        INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
-        INPUT_BLUEPRINT: ${{ inputs.blueprint }}
-        INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
-        INPUT_THEME_PATH: ${{ inputs.theme-path }}
-        INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
-        INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
-        INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
-      with:
-        github-token: ${{ secrets.github-token != '' && secrets.github-token || github.token }}
-        result-encoding: string
-        script: |
-          const path = require('path')
-          return require(path.resolve('action.js'))({context})
-  outputs:
-    preview-url: ${{ steps.preview.outputs.preview-url }}
-    blueprint-json: ${{ steps.preview.outputs.blueprint-json }}
-    rendered-description: ${{ steps.preview.outputs.rendered-description }}
-    rendered-comment: ${{ steps.preview.outputs.rendered-comment }}
-    mode: ${{ steps.preview.outputs.mode }}
-    comment-id: ${{ steps.preview.outputs.comment-id }}
+outputs:
+  preview-url: ${{ steps.preview.outputs.preview-url }}
+  blueprint-json: ${{ steps.preview.outputs.blueprint-json }}
+  rendered-description: ${{ steps.preview.outputs.rendered-description }}
+  rendered-comment: ${{ steps.preview.outputs.rendered-comment }}
+  mode: ${{ steps.preview.outputs.mode }}
+  comment-id: ${{ steps.preview.outputs.comment-id }}
