@@ -23,8 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ./.github/actions/install-dependencies
-
       - name: Rebuild the dist/ directory
         run: npm run build
 
