@@ -5,6 +5,9 @@ Thumbs.db
 # Ignore built ts files
 __tests__/runner/*
 
+# Dependencies
+node_modules/
+
 # IDE files
 .idea
 .vscode
