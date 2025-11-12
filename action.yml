@@ -55,4 +55,3 @@ outputs:
     description: Effective preview publishing mode (append-to-description or post-comment).
   comment-id:
     description: ID of the managed preview comment (if applicable).
-
