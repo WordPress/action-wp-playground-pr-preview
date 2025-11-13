@@ -503,7 +503,7 @@ jobs:
     steps:
       - name: Expose built artifact
         id: expose
-        uses: WordPress/action-wp-playground-pr-preview/.github/workflows/expose-artifact-on-public-url.yml@v2
+        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@v2
         with:
           artifact-name: 'built-plugin'
           pr-number: ${{ github.event.pull_request.number }}

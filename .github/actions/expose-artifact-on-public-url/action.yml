@@ -1,0 +1,201 @@
+name: Expose Build Artifact on a Public URL
+description: Exposes build artifacts on a public URL via GitHub releases for WordPress Playground preview access
+
+inputs:
+  artifact-name:
+    description: Name of the GitHub Actions artifact to expose (should match upload-artifact name)
+    required: true
+
+  artifact-filename:
+    description: Filename of the zip file inside the artifact
+    required: false
+    default: plugin.zip
+
+  pr-number:
+    description: Pull request number (e.g., `github.event.pull_request.number`)
+    required: true
+
+  commit-sha:
+    description: Commit SHA for unique artifact naming (e.g., `github.sha`)
+    required: true
+
+  artifacts-to-keep:
+    description: Number of most recent artifacts to keep for this PR (use `keep-all` to keep all)
+    required: false
+    default: '2'
+
+  release-tag:
+    description: GitHub release tag to use (must already exist)
+    required: false
+    default: ci-artifacts
+
+  release-repository:
+    description: 'Owner/name of the repository that stores the release (defaults to the caller repository)'
+    required: false
+    default: ''
+
+  create-release-if-missing:
+    description: 'Create the release tag when it does not already exist'
+    required: false
+    default: 'true'
+
+  cleanup-enabled:
+    description: 'Skip artifact cleanup altogether when set to false'
+    required: false
+    default: 'true'
+
+  release-token:
+    description: 'Token with `contents: write` access to the target repository (defaults to caller GITHUB_TOKEN)'
+    required: false
+    default: ''
+
+outputs:
+  artifact-url:
+    description: Public download URL for the exposed artifact
+    value: ${{ steps.expose-build-artifact-on-public-url.outputs.artifact-url }}
+
+  artifact-name:
+    description: "Filename of the exposed artifact (format: pr-NUMBER-SHA.zip)"
+    value: ${{ steps.expose-build-artifact-on-public-url.outputs.artifact-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure release token
+      shell: bash
+      env:
+        INPUT_RELEASE_TOKEN: ${{ inputs.release-token }}
+        DEFAULT_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        token="$INPUT_RELEASE_TOKEN"
+        if [ -z "$token" ]; then
+          token="$DEFAULT_TOKEN"
+        fi
+        echo "GH_RELEASE_TOKEN=$token" >> "$GITHUB_ENV"
+        echo "GH_TOKEN=$token" >> "$GITHUB_ENV"
+
+    - name: Download build artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+
+    - name: Determine release repository
+      shell: bash
+      env:
+        INPUT_RELEASE_REPOSITORY: ${{ inputs.release-repository }}
+        DEFAULT_REPOSITORY: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        release_repo="$INPUT_RELEASE_REPOSITORY"
+        if [ -z "$release_repo" ]; then
+          release_repo="$DEFAULT_REPOSITORY"
+        fi
+        echo "Using release repository: $release_repo"
+        echo "RELEASE_REPOSITORY=$release_repo" >> "$GITHUB_ENV"
+
+    - name: Ensure release exists
+      if: ${{ inputs.create-release-if-missing == 'true' }}
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release-tag }}
+      run: |
+        set -euo pipefail
+        release_repo="${RELEASE_REPOSITORY:-$GITHUB_REPOSITORY}"
+        echo "Ensuring release '$RELEASE_TAG' exists in $release_repo"
+        if gh release view "$RELEASE_TAG" --repo "$release_repo" > /dev/null 2>&1; then
+          echo "Release $RELEASE_TAG already exists"
+          exit 0
+        fi
+
+        echo "Creating draft release $RELEASE_TAG in $release_repo"
+        gh release create "$RELEASE_TAG" \
+          --repo "$release_repo" \
+          --draft \
+          --notes "Automated release for WordPress Playground CI artifacts"
+
+    - name: Upload artifact to release
+      id: expose-build-artifact-on-public-url
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release-tag }}
+        ARTIFACT_FILENAME: ${{ inputs.artifact-filename }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        COMMIT_SHA: ${{ inputs.commit-sha }}
+      run: |
+        set -euo pipefail
+        release_repo="${RELEASE_REPOSITORY:-$GITHUB_REPOSITORY}"
+        artifact_name="pr-${PR_NUMBER}-${COMMIT_SHA}.zip"
+
+        mv "$ARTIFACT_FILENAME" "$artifact_name"
+
+        echo "Uploading $artifact_name to $RELEASE_TAG release..."
+        gh release upload "$RELEASE_TAG" "$artifact_name" \
+          --repo "$release_repo" \
+          --clobber
+
+        artifact_url="https://github.com/${release_repo}/releases/download/${RELEASE_TAG}/$artifact_name"
+
+        echo "artifact-name=$artifact_name" >> "$GITHUB_OUTPUT"
+        echo "artifact-url=$artifact_url" >> "$GITHUB_OUTPUT"
+        echo "Artifact uploaded to: $artifact_url"
+
+    - name: Cleanup old artifacts for this PR
+      if: ${{ inputs.cleanup-enabled == 'true' }}
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.release-tag }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        ARTIFACTS_TO_KEEP: ${{ inputs.artifacts-to-keep }}
+      run: |
+        set -euo pipefail
+        release_repo="${RELEASE_REPOSITORY:-$GITHUB_REPOSITORY}"
+        artifacts_to_keep="$ARTIFACTS_TO_KEEP"
+
+        echo "Cleaning up old artifacts for PR #$PR_NUMBER (keeping $artifacts_to_keep most recent)"
+
+        if [ "$artifacts_to_keep" = "keep-all" ]; then
+          echo "ARTIFACTS_TO_KEEP=keep-all, keeping all artifacts for this PR"
+          exit 0
+        fi
+
+        gh release view "$RELEASE_TAG" --repo "$release_repo" --json assets \
+          --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.created_at)|\(.name)\"" \
+          > pr-artifacts.txt
+
+        if [ ! -s pr-artifacts.txt ]; then
+          echo "No existing artifacts found for PR #$PR_NUMBER"
+          exit 0
+        fi
+
+        artifact_count=$(wc -l < pr-artifacts.txt | tr -d ' ')
+        echo "Found $artifact_count total artifact(s) for PR #$PR_NUMBER"
+
+        if [ "$artifact_count" -le "$artifacts_to_keep" ]; then
+          echo "Artifact count ($artifact_count) is within limit ($artifacts_to_keep), no cleanup needed"
+          exit 0
+        fi
+
+        sort -r pr-artifacts.txt > pr-artifacts-sorted.txt
+
+        current=0
+        delete_errors=0
+        while IFS='|' read -r timestamp artifact; do
+          current=$((current + 1))
+          if [ $current -le "$artifacts_to_keep" ]; then
+            echo "Keeping: $artifact (artifact $current of $artifacts_to_keep)"
+          else
+            echo "Deleting: $artifact (old artifact #$current)"
+            if ! gh release delete-asset "$RELEASE_TAG" "$artifact" --repo "$release_repo" --yes; then
+              echo "Failed to delete $artifact"
+              delete_errors=1
+            fi
+          fi
+        done < pr-artifacts-sorted.txt
+
+        if [ "$delete_errors" -ne 0 ]; then
+          echo "One or more artifact deletions failed"
+          exit 1
+        fi
+
+        echo "Cleanup complete for PR #$PR_NUMBER"
