@@ -8,7 +8,7 @@ const githubLib = require('@actions/github');
     throw new Error('GITHUB_TOKEN (or github-token input) is required to call the GitHub API.');
   }
   const github = githubLib.getOctokit(githubToken);
-  const mode = (core.getInput('mode', {required: false}) || 'append-to-description').trim().toLowerCase();
+  const mode = (core.getInput('mode', {required: false}) || '').trim().toLowerCase();
   if (mode !== 'append-to-description' && mode !== 'comment') {
     throw new Error(`Invalid preview mode: ${mode}. Accepted values: append-to-description, comment.`);
   }

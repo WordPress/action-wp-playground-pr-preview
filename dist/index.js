@@ -31839,12 +31839,12 @@ const githubLib = __nccwpck_require__(3228);
 
 (async () => {
   const context = githubLib.context;
-  const githubToken = core.getInput('github-token', {required: false}) || process.env.GITHUB_TOKEN || process.env.INPUT_GITHUB_TOKEN;
+  const githubToken = core.getInput('github-token', {required: false});
   if (!githubToken) {
     throw new Error('GITHUB_TOKEN (or github-token input) is required to call the GitHub API.');
   }
   const github = githubLib.getOctokit(githubToken);
-  const mode = (process.env.INPUT_PREVIEW_MODE || 'append-to-description').trim().toLowerCase();
+  const mode = (core.getInput('mode', {required: false}) || '').trim().toLowerCase();
   if (mode !== 'append-to-description' && mode !== 'comment') {
     throw new Error(`Invalid preview mode: ${mode}. Accepted values: append-to-description, comment.`);
   }
@@ -31864,23 +31864,23 @@ const githubLib = __nccwpck_require__(3228);
   const headSha = pr.head.sha;
   const baseRef = pr.base.ref;
 
-  const playgroundHostRaw = process.env.INPUT_PLAYGROUND_HOST || 'https://playground.wordpress.net';
+  const playgroundHostRaw = core.getInput('playground-host', {required: false}) || 'https://playground.wordpress.net';
   const playgroundHost = playgroundHostRaw.replace(/\/+$/, '');
 
-  const pluginPath = (process.env.INPUT_PLUGIN_PATH || '').trim();
-  const themePath = (process.env.INPUT_THEME_PATH || '').trim();
-  const blueprintInput = process.env.INPUT_BLUEPRINT || '';
+  const pluginPath = (core.getInput('plugin-path', {required: false}) || '').trim();
+  const themePath = (core.getInput('theme-path', {required: false}) || '').trim();
+  const blueprintInput = core.getInput('blueprint', {required: false}) || '';
 
   if(!pluginPath && !themePath && !blueprintInput) {
     throw new Error('One of `plugin-path`, `theme-path`, or `blueprint` inputs is required.');
   }
 
-  const descriptionTemplateInput = process.env.INPUT_DESCRIPTION_TEMPLATE || '';
-  const commentTemplateInput = process.env.INPUT_COMMENT_TEMPLATE || '';
+  const descriptionTemplateInput = core.getInput('description-template', {required: false}) || '';
+  const commentTemplateInput = core.getInput('comment-template', {required: false}) || '';
   const descriptionMarkerStart = '<!-- wp-playground-preview:start -->';
   const descriptionMarkerEnd = '<!-- wp-playground-preview:end -->';
   const commentIdentifier = '<!-- wp-playground-preview-comment -->';
-  const restoreButtonIfRemoved = process.env.INPUT_RESTORE_BUTTON_IF_REMOVED !== 'false';
+  const restoreButtonIfRemoved = core.getInput('restore-button-if-removed', {required: false}) !== 'false';
 
   const safeParseJson = (label, value, fallback = {}) => {
     if (!value || !value.trim()) {
