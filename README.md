@@ -31,11 +31,11 @@ jobs:
       plugin-path: .
 ```
 
-## Usage
+## Examples
 
 ### Plugin repository with no build process
 
-See the usage example above.
+See the usage example above. You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-plugin-example](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/1).
 
 ### Theme repository with no build process
 
@@ -143,7 +143,7 @@ When `blueprint-url` is set, you can omit `plugin-path`, `theme-path`, and `blue
 
 ### Plugin or theme repository with a CI build
 
-See the [preview-in-playground-button-built-artifact-example](preview-in-playground-button-built-artifact-example) section below for an example of how to test built artifacts in WordPress Playground.
+See the [preview-in-playground-button-built-artifact-example](#advanced-testing-built-ci-artifacts) section below for an example of how to test built artifacts in WordPress Playground.
 
 ### Customize the preview button/comment
 
@@ -536,6 +536,8 @@ jobs:
     with:
       blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
 ```
+
+You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-built-artifact-example](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2).
 
 ### Expose Artifact Inputs
 
