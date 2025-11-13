@@ -23,11 +23,11 @@ jobs:
       pull-requests: write
     uses: WordPress/action-wp-playground-pr-preview@v2
     with:
-    # "append-to-description"  – add the button to the PR description
+      # "append-to-description"  – add the button to the PR description
       # "post-comment"           – create a new comment with the preview button
       mode: "append-to-description"
     
-    # Use "." if plugin is in repository root
+      # Use "." if plugin is in repository root
       plugin-path: .
 ```
 
