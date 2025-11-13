@@ -44,16 +44,6 @@ secrets:
 
 runs:
   using: 'node20'
-  env:
-    INPUT_PREVIEW_MODE: ${{ inputs.mode }}
-    INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
-    INPUT_BLUEPRINT: ${{ inputs.blueprint }}
-    INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
-    INPUT_THEME_PATH: ${{ inputs.theme-path }}
-    INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
-    INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
-    INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
-    INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
   main: 'dist/index.js'
 
 outputs:
