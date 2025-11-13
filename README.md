@@ -32,6 +32,7 @@ jobs:
 
           # Use "." if plugin is in repository root
           plugin-path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 > **Important:** `WordPress/action-wp-playground-pr-preview@v2` is a regular action. Always reference it inside a job step (under `jobs.<job_id>.steps`). GitHub only allows `jobs.<job_id>.uses` for reusable workflows that point to another workflow file such as `owner/repo/.github/workflows/workflow.yml@ref`.
@@ -66,6 +67,7 @@ jobs:
         with:
           # Use "." if theme is in repository root
           theme-path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### Plugin in a subdirectory
@@ -141,6 +143,7 @@ jobs:
       - uses: WordPress/action-wp-playground-pr-preview@v2
         with:
           blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### External Blueprint URL
@@ -432,16 +435,8 @@ Only provide a custom token if you need to:
 - Use a fine-grained personal access token with specific permissions
 - Work around workflow restrictions in your repository
 
-**Example (using default token - recommended):**
-```yaml
-steps:
-  - uses: WordPress/action-wp-playground-pr-preview@v2
-    with:
-      plugin-path: .
-      # No secrets needed - GITHUB_TOKEN is used automatically
-```
+**Example:**
 
-**Example (using custom token):**
 ```yaml
 steps:
   - uses: WordPress/action-wp-playground-pr-preview@v2
@@ -558,6 +553,7 @@ jobs:
       - uses: WordPress/action-wp-playground-pr-preview@v2
         with:
           blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-built-artifact-example](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2).
@@ -631,7 +627,7 @@ artifacts for the same PR, keeping only the N most recent.
 
 **Optional** Token with `contents: write` access to the release repository.
 
-If omitted, the action falls back to the workflow's `${{ github.token }}`.
+If omitted, the action falls back to the workflow's `${{ secrets.GITHUB_TOKEN }}`.
 
 ### Expose Artifact Outputs
 
@@ -659,6 +655,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          plugin-path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### CI artifacts are not accessible in WordPress Playground
