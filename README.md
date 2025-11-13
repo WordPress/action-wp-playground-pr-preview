@@ -451,16 +451,16 @@ The ID of the created/updated comment (when using `post-comment` mode).
 
 ## Advanced: Testing Built CI Artifacts
 
-If your plugin or theme requires a build step, you can use the `expose-artifact-on-public-url.yml` workflow to expose the artifacts created in your CI on a public URL that WordPress Playground can access.
+If your plugin or theme requires a build step, you can use the `expose-artifact-on-public-url.yml` action to expose the artifacts created in your CI on a public URL that WordPress Playground can access.
 
-This workflow exposes built artifacts on a public URL. It helps WordPress
+This action exposes built artifacts on a public URL. It helps WordPress
 Playground preview CI artifacts that are normally not accessible via a public URL.
  
 Under the hood, it uses the GitHub releases feature. It creates a single public 
 draft release and uploads all the handled artifacts to that release. Note this
 means **one technical release in total**, not one per handled PR.
 
-This workflow also automatically cleans up old artifacts for the same PR, keeping
+This action also automatically cleans up old artifacts for the same PR, keeping
 only the N most recent.
 
 Here's how to use it:
@@ -494,14 +494,21 @@ jobs:
   # Expose the built artifact on a public URL
   expose-build:
     needs: build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    uses: WordPress/action-wp-playground-pr-preview/expose-artifact-on-public-url.yml@v2
-    with:
-      artifact-name: 'built-plugin'
-      pr-number: ${{ github.event.pull_request.number }}
-      commit-sha: ${{ github.sha }}
-      artifacts-to-keep: '2' # Number of most recent artifacts to keep for this PR. Use `keep-all` to keep all artifacts.
+    outputs:
+      artifact-url: ${{ steps.expose.outputs.artifact-url }}
+      artifact-name: ${{ steps.expose.outputs.artifact-name }}
+    steps:
+      - name: Expose built artifact
+        id: expose
+        uses: WordPress/action-wp-playground-pr-preview/.github/workflows/expose-artifact-on-public-url.yml@v2
+        with:
+          artifact-name: 'built-plugin'
+          pr-number: ${{ github.event.pull_request.number }}
+          commit-sha: ${{ github.sha }}
+          artifacts-to-keep: '2' # Number of most recent artifacts to keep for this PR. Use `keep-all` to keep all artifacts.
 
   # Create the preview with the public URL
   create-blueprint:
@@ -549,6 +556,14 @@ You can use the same syntax to format the artifact-name for this job.
 
 Example: 'built-plugin'
 
+#### `artifact-filename`
+
+**Optional** Name of the zip file inside the downloaded artifact bundle.
+
+**Default:** `plugin.zip`
+
+Set this if your artifact uploads a differently named ZIP (for example `theme.zip`).
+
 #### `pr-number`
 
 **Required** The current pull request number.
@@ -574,6 +589,30 @@ artifacts for the same PR, keeping only the N most recent.
 
 **Default:** `ci-artifacts`
 
+#### `release-repository`
+
+**Optional** Target repository in `owner/name` form when you want to store artifacts somewhere other than the current repository.
+
+**Default:** Uses the repository that runs the workflow.
+
+#### `create-release-if-missing`
+
+**Optional** Automatically creates the `release-tag` if it does not already exist.
+
+**Default:** `true`
+
+#### `cleanup-enabled`
+
+**Optional** Set to `false` to skip deleting older artifacts for the same PR.
+
+**Default:** `true`
+
+#### `release-token`
+
+**Optional** Token with `contents: write` access to the release repository.
+
+If omitted, the action falls back to the workflow's `${{ github.token }}`.
+
 ### Expose Artifact Outputs
 
 #### `artifact-url`
@@ -587,12 +626,6 @@ Public download URL for the exposed artifact.
 Filename of the exposed artifact.
 
 **Format:** `pr-NUMBER-SHA.zip`
-
-#### `artifact-filename`
-
-**Optional** Filename of the zip file inside the exposed artifact.
-
-**Default:** `plugin.zip`
 
 ## License
 
