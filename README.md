@@ -18,18 +18,23 @@ on:
 
 jobs:
   preview:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview@v2
-    with:
-      # "append-to-description"  – add the button to the PR description
-      # "comment"           – create a new comment with the preview button
-      mode: "append-to-description"
-    
-      # Use "." if plugin is in repository root
-      plugin-path: .
+    steps:
+      - name: Post Playground Preview Button
+        uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          # "append-to-description"  – add the button to the PR description
+          # "comment"           – create a new comment with the preview button
+          mode: "append-to-description"
+
+          # Use "." if plugin is in repository root
+          plugin-path: .
 ```
+
+> **Important:** `WordPress/action-wp-playground-pr-preview@v2` is a regular action. Always reference it inside a job step (under `jobs.<job_id>.steps`). GitHub only allows `jobs.<job_id>.uses` for reusable workflows that point to another workflow file such as `owner/repo/.github/workflows/workflow.yml@ref`.
 
 ## Examples
 
@@ -51,13 +56,16 @@ on:
 
 jobs:
   preview:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview@v2
-    with:
-    # Use "." if theme is in repository root
-      theme-path: .
+    steps:
+      - name: Post Playground Preview Button
+        uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          # Use "." if theme is in repository root
+          theme-path: .
 ```
 
 ### Plugin in a subdirectory
@@ -125,12 +133,14 @@ jobs:
   playground-preview:
     name: Post Playground Preview Button
     needs: create-blueprint
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview@v2
-    with:
-      blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
+    steps:
+      - uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
 ```
 
 ### External Blueprint URL
@@ -424,19 +434,20 @@ Only provide a custom token if you need to:
 
 **Example (using default token - recommended):**
 ```yaml
-uses: WordPress/action-wp-playground-pr-preview@v2
-with:
-  plugin-path: .
-# No secrets needed - GITHUB_TOKEN is used automatically
+steps:
+  - uses: WordPress/action-wp-playground-pr-preview@v2
+    with:
+      plugin-path: .
+      # No secrets needed - GITHUB_TOKEN is used automatically
 ```
 
 **Example (using custom token):**
 ```yaml
-uses: WordPress/action-wp-playground-pr-preview@v2
-with:
-  plugin-path: .
-secrets:
-  github-token: ${{ secrets.CUSTOM_TOKEN }}
+steps:
+  - uses: WordPress/action-wp-playground-pr-preview@v2
+    with:
+      plugin-path: .
+      github-token: ${{ secrets.CUSTOM_TOKEN }}
 ```
 
 ## Outputs
@@ -536,11 +547,13 @@ jobs:
 
   preview:
     needs: create-blueprint
+    runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview@v2
-    with:
-      blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
+    steps:
+      - uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
 ```
 
 You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-built-artifact-example](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2).
