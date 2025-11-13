@@ -44,11 +44,12 @@ inputs:
     required: false
     default: 'true'
 
-  release-token:
+  github-token:
     description: 'Token with `contents: write` access to the target repository (defaults to caller GITHUB_TOKEN)'
     required: false
     default: ''
 
+  
 outputs:
   artifact-url:
     description: Public download URL for the exposed artifact
@@ -64,7 +65,7 @@ runs:
     - name: Configure release token
       shell: bash
       env:
-        INPUT_RELEASE_TOKEN: ${{ inputs.release-token }}
+        INPUT_RELEASE_TOKEN: ${{ inputs.github-token }}
         DEFAULT_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail

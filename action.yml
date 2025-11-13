@@ -5,7 +5,7 @@ description: Automatically add a "Preview in WordPress Playground" button to you
 inputs:
   mode:
     type: string
-    description: 'How to publish the preview button: `append-to-description` or `post-comment`'
+    description: 'How to publish the preview button: `append-to-description` or `comment`'
     default: append-to-description
   playground-host:
     type: string
@@ -30,6 +30,10 @@ inputs:
     type: boolean
     description: Whether to restore the preview button if removed by PR author (only applies to `append-to-description` mode)
     default: true
+  github-token:
+    description: >
+      GitHub token for updating PRs (defaults to GITHUB_TOKEN). Required permissions:
+      `pull-requests: write`, `contents: read`
 
 secrets:
   github-token:
@@ -40,6 +44,16 @@ secrets:
 
 runs:
   using: 'node20'
+  env:
+    INPUT_PREVIEW_MODE: ${{ inputs.mode }}
+    INPUT_PLAYGROUND_HOST: ${{ inputs.playground-host }}
+    INPUT_BLUEPRINT: ${{ inputs.blueprint }}
+    INPUT_PLUGIN_PATH: ${{ inputs.plugin-path }}
+    INPUT_THEME_PATH: ${{ inputs.theme-path }}
+    INPUT_DESCRIPTION_TEMPLATE: ${{ inputs.description-template }}
+    INPUT_COMMENT_TEMPLATE: ${{ inputs.comment-template }}
+    INPUT_RESTORE_BUTTON_IF_REMOVED: ${{ inputs.restore-button-if-removed }}
+    INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
   main: 'dist/index.js'
 
 outputs:
@@ -52,7 +66,7 @@ outputs:
   rendered-comment:
     description: Markdown/HTML snippet used when posting a comment.
   mode:
-    description: Effective preview publishing mode (append-to-description or post-comment).
+    description: Effective preview publishing mode (append-to-description or comment).
   comment-id:
     description: ID of the managed preview comment (if applicable).
 

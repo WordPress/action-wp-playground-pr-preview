@@ -31845,8 +31845,8 @@ const githubLib = __nccwpck_require__(3228);
   }
   const github = githubLib.getOctokit(githubToken);
   const mode = (process.env.INPUT_PREVIEW_MODE || 'append-to-description').trim().toLowerCase();
-  if (mode !== 'append-to-description' && mode !== 'post-comment') {
-    throw new Error(`Invalid preview mode: ${mode}. Accepted values: append-to-description, post-comment.`);
+  if (mode !== 'append-to-description' && mode !== 'comment') {
+    throw new Error(`Invalid preview mode: ${mode}. Accepted values: append-to-description, comment.`);
   }
 
   const pr = context.payload.pull_request;

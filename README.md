@@ -24,7 +24,7 @@ jobs:
     uses: WordPress/action-wp-playground-pr-preview@v2
     with:
       # "append-to-description"  – add the button to the PR description
-      # "post-comment"           – create a new comment with the preview button
+      # "comment"           – create a new comment with the preview button
       mode: "append-to-description"
     
       # Use "." if plugin is in repository root
@@ -70,7 +70,7 @@ with:
 ```yaml
 with:
   plugin-path: .
-  mode: post-comment
+  mode: comment
 ```
 
 ### Custom Blueprint
@@ -153,7 +153,7 @@ Or customize comment format:
 
 ```yaml
 with:
-  mode: post-comment
+  mode: comment
   comment-template: |
     ## Preview Changes in WordPress Playground
 
@@ -176,7 +176,7 @@ with:
 
 Accepted values:
 - `append-to-description` (default) – Automatically updates the PR description with a managed block containing the preview button. The block is wrapped in HTML comment markers (`<!-- wp-playground-preview:start -->` and `<!-- wp-playground-preview:end -->`) so it can be updated on subsequent workflow runs.
-- `post-comment` – Posts the preview button as a PR comment. Updates the same comment on subsequent runs rather than creating duplicates.
+- `comment` – Posts the preview button as a PR comment. Updates the same comment on subsequent runs rather than creating duplicates.
 
 **Default:** `append-to-description`
 
@@ -318,7 +318,7 @@ with:
 
 ### `comment-template`
 
-**Optional** Custom markdown/HTML template for PR comments (only used in `post-comment` mode).
+**Optional** Custom markdown/HTML template for PR comments (only used in `comment` mode).
 
 The template supports variable interpolation using `{{VARIABLE_NAME}}` syntax (case-insensitive). The rendered comment will include a hidden identifier marker so it can be updated on subsequent runs.
 
@@ -336,7 +336,7 @@ The changes in this pull request can previewed and tested using a WordPress Play
 **Example (custom comment with testing instructions):**
 ```yaml
 with:
-  mode: post-comment
+  mode: comment
   comment-template: |
     ## Preview Changes in WordPress Playground
 
@@ -426,9 +426,9 @@ secrets:
 - `preview-url`: The full URL to the WordPress Playground preview.
 - `blueprint-json`: The complete blueprint JSON string used for the preview.
 - `rendered-description`: The rendered description content (when using `append-to-description` mode).
-- `rendered-comment`: The rendered comment content (when using `post-comment` mode).
+- `rendered-comment`: The rendered comment content (when using `comment` mode).
 - `mode`: The mode used for publishing the preview.
-- `comment-id`: The ID of the created/updated comment (when using `post-comment` mode).
+- `comment-id`: The ID of the created/updated comment (when using `comment` mode).
 
 ---
 
@@ -590,7 +590,7 @@ artifacts for the same PR, keeping only the N most recent.
 
 **Default:** `true`
 
-#### `release-token`
+#### `github-token`
 
 **Optional** Token with `contents: write` access to the release repository.
 
