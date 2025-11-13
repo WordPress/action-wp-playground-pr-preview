@@ -40,7 +40,7 @@ jobs:
 
 ### Plugin repository without a CI build process
 
-See the usage example above. You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-plugin-example](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/1).
+See the usage example above. You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-plugin-example](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/3).
 
 ### Plugin or theme repository with a CI build process
 
@@ -472,6 +472,10 @@ Under the hood, it uses the GitHub releases feature. It creates a single public
 draft release and uploads all the handled artifacts to that release. Note this
 means **one technical release in total**, not one per handled PR.
 
+> **:warning: Important Notice:**  
+> Before using the preview button with artifacts you **must make the draft release public (i.e., mark it as pre-release or publish it)**. Only this action makes the artifact URL accessible to WordPress Playground.
+
+
 This action also automatically cleans up old artifacts for the same PR, keeping
 only the N most recent.
 
@@ -642,6 +646,40 @@ Public download URL for the exposed artifact.
 Filename of the exposed artifact.
 
 **Format:** `pr-NUMBER-SHA.zip`
+
+## Troubleshooting
+
+### GitHub reports a `workflow-call` lint error
+
+If you see `reusable workflow call ... is not following the format "owner/repo/path/to/workflow.yml@ref"`, it means you tried to run this action as a reusable workflow. `WordPress/action-wp-playground-pr-preview@v2` is a regular action, so keep it under `jobs.<job_id>.steps`:
+
+```yaml
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: WordPress/action-wp-playground-pr-preview@v2
+```
+
+### CI artifacts are not accessible in WordPress Playground
+
+As mentioned in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-ci-artifacts), the artifact helper stores files on a single draft release. Draft releases remain private until they are published. Publish or mark that release as a pre-release so the download URL becomes public; otherwise WordPress Playground cannot fetch the zip and the preview button fails.
+
+### Workflow fails with "Resource not accessible by integration"
+
+Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. Add the permissions block from the basic example or provide a PAT with the same scopes. Without those permissions GitHub blocks the API call and you will see this error in the `Post Playground Preview Button` step.
+
+### Step fails with "You must configure plugin-path/theme-path/blueprint"
+
+The action needs either `plugin-path`, `theme-path`, `blueprint`, or `blueprint-url`. Forgetting to set any of them causes an early failure. Point `plugin-path` or `theme-path` to the folder that contains `my-plugin.php` or `style.css`, or pass a custom blueprint if you have more complex needs.
+
+### Playground opens but plugin changes look stale
+
+When the plugin lives in a subdirectory (for example, `plugins/my-awesome-plugin`), you must point `plugin-path` at that subfolder. Otherwise the action zips the repository root and Playground never loads your updated code. The same applies to built artifacts—ensure the uploaded ZIP contains the build you expect.
+
+### Custom blueprint fails with "Unexpected token" or blank Playground
+
+Custom blueprints are JSON strings; a missing comma or dangling comment will break the preview. Validate the blueprint locally (e.g., `node -e 'JSON.parse(fs.readFileSync("blueprint.json"))'`) before passing it through the workflow, or store it in a separate `.json` file and feed it via `blueprint-url`.
 
 ## License
 
