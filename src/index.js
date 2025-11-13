@@ -34,9 +34,10 @@ const githubLib = require('@actions/github');
   const pluginPath = (core.getInput('plugin-path', {required: false}) || '').trim();
   const themePath = (core.getInput('theme-path', {required: false}) || '').trim();
   const blueprintInput = core.getInput('blueprint', {required: false}) || '';
+  const blueprintUrlInput = (core.getInput('blueprint-url', {required: false}) || '').trim();
 
-  if(!pluginPath && !themePath && !blueprintInput) {
-    throw new Error('One of `plugin-path`, `theme-path`, or `blueprint` inputs is required.');
+  if(!pluginPath && !themePath && !blueprintInput && !blueprintUrlInput) {
+    throw new Error('One of `plugin-path`, `theme-path`, `blueprint`, or `blueprint-url` inputs is required.');
   }
 
   const descriptionTemplateInput = core.getInput('description-template', {required: false}) || '';
@@ -135,15 +136,20 @@ const githubLib = require('@actions/github');
     );
   };
 
-  const blueprintJson = blueprintInput && blueprintInput.trim().length
-    ? blueprintInput.trim()
-    : buildAutoBlueprint();
+  let blueprintJson = '';
+  if (blueprintInput && blueprintInput.trim().length) {
+    blueprintJson = blueprintInput.trim();
+  } else if (pluginPath || themePath) {
+    blueprintJson = buildAutoBlueprint();
+  }
 
-  try {
-    JSON.parse(blueprintJson);
-  } catch (error) {
-    core.warning(blueprintJson);
-    throw new Error(`Blueprint is not valid JSON. ${error.message}`);
+  if (blueprintJson) {
+    try {
+      JSON.parse(blueprintJson);
+    } catch (error) {
+      core.warning(blueprintJson);
+      throw new Error(`Blueprint is not valid JSON. ${error.message}`);
+    }
   }
 
   const mergeVariables = (...maps) => maps.reduce((acc, map) => {
@@ -180,9 +186,14 @@ const githubLib = require('@actions/github');
     });
   };
 
-  const blueprintDataUrl = `data:application/json,${encodeURIComponent(blueprintJson)}`;
-
-  const previewUrl = `${playgroundHost}${playgroundHost.includes('?') ? '&' : '?'}blueprint-url=${blueprintDataUrl}`;
+  const blueprintDataUrl = blueprintJson
+    ? `data:application/json,${encodeURIComponent(blueprintJson)}`
+    : '';
+  const finalBlueprintUrl = blueprintUrlInput || blueprintDataUrl;
+  const blueprintQueryValue = blueprintUrlInput
+    ? encodeURIComponent(blueprintUrlInput)
+    : blueprintDataUrl;
+  const previewUrl = `${playgroundHost}${playgroundHost.includes('?') ? '&' : '?'}blueprint-url=${blueprintQueryValue}`;
 
   const joinWithNewline = (segments) => segments.join('\n');
   const defaultButtonImageUrl = 'https://raw.githubusercontent.com/adamziel/playground-preview/refs/heads/trunk/assets/playground-preview-button.svg';
@@ -228,7 +239,7 @@ const githubLib = require('@actions/github');
     {
   	PLAYGROUND_URL: previewUrl,
   	PLAYGROUND_BLUEPRINT_JSON: blueprintJson,
-  	PLAYGROUND_BLUEPRINT_DATA_URL: blueprintDataUrl,
+  	PLAYGROUND_BLUEPRINT_DATA_URL: finalBlueprintUrl,
   	PLAYGROUND_BUTTON_IMAGE_URL: defaultButtonImageUrl,
   	PLAYGROUND_BUTTON: substitute(defaultButtonTemplate, {})
     }

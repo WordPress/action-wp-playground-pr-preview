@@ -129,6 +129,18 @@ jobs:
       blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
 ```
 
+### External Blueprint URL
+
+Already hosting your blueprint JSON elsewhere? Provide a `blueprint-url` input pointing to that file:
+
+```yaml
+with:
+  mode: append-to-description
+  blueprint-url: https://example.com/path/to/blueprint.json
+```
+
+When `blueprint-url` is set, you can omit `plugin-path`, `theme-path`, and `blueprint`—the action links directly to the remote blueprint via `?blueprint-url=...`.
+
 ### Plugin or theme repository with a CI build
 
 See the [preview-in-playground-button-built-artifact-example](preview-in-playground-button-built-artifact-example) section below for an example of how to test built artifacts in WordPress Playground.

@@ -14,6 +14,9 @@ inputs:
   blueprint:
     type: string
     description: Custom WordPress Blueprint as a JSON string. When provided, `plugin-path` and `theme-path` are ignored.
+  blueprint-url:
+    type: string
+    description: 'URL pointing to a remote blueprint. When provided, the Playground link uses `?blueprint-url={url}` directly.'
   plugin-path:
     type: string
     description: Path to plugin directory inside the repository (e.g., `.` for root or `plugins/my-plugin`)
@@ -59,7 +62,6 @@ outputs:
     description: Effective preview publishing mode (append-to-description or comment).
   comment-id:
     description: ID of the managed preview comment (if applicable).
-
 
 
 
