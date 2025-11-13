@@ -180,6 +180,12 @@ with:
     **PR:** #{{PR_NUMBER}} - {{PR_TITLE}}
 ```
 
+## Usage in other repositories
+
+* WordPress/blueprints: [CI workflow](https://raw.githubusercontent.com/WordPress/blueprints/6390c687c03035e088d1646cad28b8310bb3f705/.github/workflows/preview-comment.yml), [Sample PR](https://github.com/WordPress/blueprints/pull/155)
+* adamziel/preview-in-playground-button-plugin-example: [CI workflow](https://raw.githubusercontent.com/adamziel/preview-in-playground-button-plugin-example/d15b741deaae32ebef5bdf1009aaed3c614e6f4a/.github/workflows/pr-playground-preview.yml), [Sample PR](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/3)
+* adamziel/preview-in-playground-button-built-artifact-example: [CI workflow](https://raw.githubusercontent.com/adamziel/preview-in-playground-button-built-artifact-example/83f91ecf83843b102d19afdf56802b2608a2e98f/.github/workflows/pr-playground-preview.yml), [Sample PR](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2)
+
 ## Inputs
 
 ### `mode`
