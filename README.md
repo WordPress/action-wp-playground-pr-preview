@@ -33,11 +33,15 @@ jobs:
 
 ## Examples
 
-### Plugin repository with no build process
+### Plugin repository without a CI build process
 
 See the usage example above. You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-plugin-example](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/1).
 
-### Theme repository with no build process
+### Plugin or theme repository with a CI build process
+
+See the [preview-in-playground-button-built-artifact-example](#advanced-testing-built-ci-artifacts) section below for an example of how to test built artifacts in WordPress Playground.
+
+### Theme repository without a CI build process
 
 ```yaml
 name: PR Preview
@@ -140,10 +144,6 @@ with:
 ```
 
 When `blueprint-url` is set, you can omit `plugin-path`, `theme-path`, and `blueprint`—the action links directly to the remote blueprint via `?blueprint-url=...`.
-
-### Plugin or theme repository with a CI build
-
-See the [preview-in-playground-button-built-artifact-example](#advanced-testing-built-ci-artifacts) section below for an example of how to test built artifacts in WordPress Playground.
 
 ### Customize the preview button/comment
 
