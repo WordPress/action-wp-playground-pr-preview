@@ -423,29 +423,12 @@ secrets:
 
 ## Outputs
 
-### `preview-url`
-
-The full URL to the WordPress Playground preview.
-
-### `blueprint-json`
-
-The complete blueprint JSON string used for the preview.
-
-### `rendered-description`
-
-The rendered description content (when using `append-to-description` mode).
-
-### `rendered-comment`
-
-The rendered comment content (when using `post-comment` mode).
-
-### `mode`
-
-The mode used for publishing the preview.
-
-### `comment-id`
-
-The ID of the created/updated comment (when using `post-comment` mode).
+- `preview-url`: The full URL to the WordPress Playground preview.
+- `blueprint-json`: The complete blueprint JSON string used for the preview.
+- `rendered-description`: The rendered description content (when using `append-to-description` mode).
+- `rendered-comment`: The rendered comment content (when using `post-comment` mode).
+- `mode`: The mode used for publishing the preview.
+- `comment-id`: The ID of the created/updated comment (when using `post-comment` mode).
 
 ---
 
