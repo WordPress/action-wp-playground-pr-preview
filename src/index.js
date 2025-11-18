@@ -13,20 +13,42 @@ const githubLib = require('@actions/github');
     throw new Error(`Invalid preview mode: ${mode}. Accepted values: append-to-description, comment.`);
   }
 
+  // Accept data from both context and inputs
+  // Inputs take precedence over context values
+  const prNumberInput = core.getInput('pr-number', {required: false});
+  const prTitleInput = core.getInput('pr-title', {required: false});
+  const prHeadRefInput = core.getInput('pr-head-ref', {required: false});
+  const prHeadShaInput = core.getInput('pr-head-sha', {required: false});
+  const prBaseRefInput = core.getInput('pr-base-ref', {required: false});
+  const prBodyInput = core.getInput('pr-body', {required: false});
+  const repoOwnerInput = core.getInput('repo-owner', {required: false});
+  const repoNameInput = core.getInput('repo-name', {required: false});
+  const repoFullNameInput = core.getInput('repo-full-name', {required: false});
+
   const pr = context.payload.pull_request;
-  if (!pr) {
-    throw new Error('This workflow must run on a pull_request event payload.');
+  const repo = context.payload.repository;
+
+  // If inputs are not provided, try to get from context
+  if (!prNumberInput && !pr) {
+    throw new Error('This workflow must run on a pull_request event payload, or pr-number must be provided as input.');
   }
 
-  const repo = context.payload.repository;
-  const owner = repo.owner.login || repo.owner.name || repo.owner.id;
-  const repoName = repo.name;
-  const repoFullName = repo.full_name;
-  const prNumber = pr.number;
-  const prTitle = pr.title;
-  const headRef = pr.head.ref;
-  const headSha = pr.head.sha;
-  const baseRef = pr.base.ref;
+  const owner = repoOwnerInput || (repo ? (repo.owner.login || repo.owner.name || repo.owner.id) : null);
+  const repoName = repoNameInput || (repo ? repo.name : null);
+  const repoFullName = repoFullNameInput || (repo ? repo.full_name : null);
+  const prNumber = prNumberInput ? parseInt(prNumberInput, 10) : (pr ? pr.number : null);
+  const prTitle = prTitleInput || (pr ? pr.title : '');
+  const headRef = prHeadRefInput || (pr ? pr.head.ref : null);
+  const headSha = prHeadShaInput || (pr ? pr.head.sha : null);
+  const baseRef = prBaseRefInput || (pr ? pr.base.ref : null);
+
+  // Validate required fields
+  if (!owner || !repoName || !repoFullName || !prNumber || !headRef || !headSha) {
+    throw new Error('Missing required data. Provide either pull_request context or all required inputs (pr-number, pr-head-ref, pr-head-sha, repo-owner, repo-name, repo-full-name).');
+  }
+
+  // Update pr object to include body from input if provided
+  const prWithBody = pr ? {...pr, body: prBodyInput || pr.body} : {number: prNumber, body: prBodyInput || ''};
 
   const playgroundHostRaw = core.getInput('playground-host', {required: false}) || 'https://playground.wordpress.net';
   const playgroundHost = playgroundHostRaw.replace(/\/+$/, '');
@@ -258,7 +280,7 @@ const githubLib = require('@actions/github');
   const renderedComment = substitute(commentTemplate, templateVariables);
 
   const performDescriptionUpdate = async () => {
-    const currentBody = pr.body || '';
+    const currentBody = prWithBody.body || '';
     const managedBlock = `${descriptionMarkerStart}${String.fromCodePoint(10)}${renderedDescription.trim()}${String.fromCodePoint(10)}${descriptionMarkerEnd}`;
     let nextBody;
 
@@ -305,7 +327,7 @@ const githubLib = require('@actions/github');
   };
 
   const removeManagedDescriptionBlock = async () => {
-    const currentBody = pr.body || '';
+    const currentBody = prWithBody.body || '';
     if (!currentBody.includes(descriptionMarkerStart) || !currentBody.includes(descriptionMarkerEnd)) {
   	return;
     }
