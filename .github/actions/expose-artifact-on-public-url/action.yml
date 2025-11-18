@@ -11,6 +11,16 @@ inputs:
     required: false
     default: plugin.zip
 
+  artifact-source-run-id:
+    description: 'Workflow run ID that produced the artifact (defaults to current workflow run)'
+    required: false
+    default: ''
+
+  artifact-source-repository:
+    description: 'Owner/name of the repository that contains the artifact run (defaults to the caller repository)'
+    required: false
+    default: ''
+
   pr-number:
     description: Pull request number (e.g., `github.event.pull_request.number`)
     required: true
@@ -76,10 +86,63 @@ runs:
         echo "GH_RELEASE_TOKEN=$token" >> "$GITHUB_ENV"
         echo "GH_TOKEN=$token" >> "$GITHUB_ENV"
 
+    - name: Determine artifact source repository
+      shell: bash
+      env:
+        INPUT_ARTIFACT_SOURCE_REPOSITORY: ${{ inputs.artifact-source-repository }}
+        DEFAULT_REPOSITORY: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+        artifact_repo="$INPUT_ARTIFACT_SOURCE_REPOSITORY"
+        if [ -z "$artifact_repo" ]; then
+          artifact_repo="$DEFAULT_REPOSITORY"
+        fi
+        echo "Using artifact source repository: $artifact_repo"
+        echo "ARTIFACT_SOURCE_REPOSITORY=$artifact_repo" >> "$GITHUB_ENV"
+
     - name: Download build artifact
+      if: ${{ inputs.artifact-source-run-id == '' }}
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
+
+    - name: Download build artifact from workflow run
+      if: ${{ inputs.artifact-source-run-id != '' }}
+      shell: bash
+      env:
+        ARTIFACT_NAME: ${{ inputs.artifact-name }}
+        ARTIFACT_FILENAME: ${{ inputs.artifact-filename }}
+        ARTIFACT_SOURCE_RUN_ID: ${{ inputs.artifact-source-run-id }}
+      run: |
+        set -euo pipefail
+        artifact_repo="${ARTIFACT_SOURCE_REPOSITORY:-$GITHUB_REPOSITORY}"
+        run_id="$ARTIFACT_SOURCE_RUN_ID"
+
+        echo "Fetching artifact '$ARTIFACT_NAME' from workflow run $run_id in $artifact_repo"
+
+        artifact_id=$(gh api \
+          "/repos/$artifact_repo/actions/runs/$run_id/artifacts" \
+          --paginate \
+          --jq ".artifacts[] | select(.name == \"$ARTIFACT_NAME\") | .id" | head -n 1)
+
+        if [ -z "$artifact_id" ]; then
+          echo "Artifact '$ARTIFACT_NAME' not found in workflow run $run_id" >&2
+          exit 1
+        fi
+
+        download_path="$RUNNER_TEMP/${ARTIFACT_NAME}-artifact.zip"
+        echo "Downloading artifact id $artifact_id to $download_path"
+        gh api -X GET \
+          "/repos/$artifact_repo/actions/artifacts/$artifact_id/zip" \
+          > "$download_path"
+
+        echo "Extracting artifact contents into workspace"
+        unzip -oq "$download_path" -d "$GITHUB_WORKSPACE"
+
+        if [ ! -f "$ARTIFACT_FILENAME" ]; then
+          echo "Expected file '$ARTIFACT_FILENAME' not found inside artifact '$ARTIFACT_NAME'" >&2
+          exit 1
+        fi
 
     - name: Determine release repository
       shell: bash

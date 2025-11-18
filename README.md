@@ -558,6 +558,56 @@ jobs:
 
 You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-built-artifact-example](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2).
 
+### Publishing from a `workflow_run` job
+
+Some repositories split their CI into two workflows:
+
+1. A "build" workflow that runs on each pull request with default permissions and uploads artifacts
+2. A privileged "publish" workflow triggered via `workflow_run` that can write to releases and secrets
+
+The `expose-artifact-on-public-url` action can now fetch artifacts directly from the originating workflow run—no more temporary "bridging" downloads or re-uploads. Simply provide the run ID (and optionally the repository) of the workflow that produced the artifact:
+
+```yaml
+name: PR Playground Preview – Publish
+on:
+  workflow_run:
+    workflows: ["PR Playground Preview – Build"]
+    types: [completed]
+
+jobs:
+  publish-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Expose built artifact
+        id: expose
+        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@v2
+        with:
+          artifact-name: gutenberg-plugin-zip
+          artifact-filename: gutenberg.zip
+          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          commit-sha: ${{ github.event.workflow_run.head_sha }}
+          artifact-source-run-id: ${{ github.event.workflow_run.id }}
+          # Needed only when the build lives in a different repository
+          # artifact-source-repository: other-owner/other-repo
+
+      - name: Post Playground preview button
+        uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          mode: append-to-description
+          blueprint: >-
+            {"steps":[{"step":"installPlugin","pluginZipFile":{"resource":"url","url":"${{ steps.expose.outputs.artifact-url }}"}}]}
+          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+If you already emit metadata artifacts (for example, to handle multiple PRs per run), you can still download them before calling the action. The important change is that you no longer need intermediary steps to unzip and re-upload the build artifact just to make it available inside the privileged publish workflow.
+
 ### Expose Artifact Inputs
 
 #### `artifact-name`
@@ -579,6 +629,22 @@ Example: 'built-plugin'
 **Default:** `plugin.zip`
 
 Set this if your artifact uploads a differently named ZIP (for example `theme.zip`).
+
+#### `artifact-source-run-id`
+
+**Optional** ID of the workflow run that originally uploaded the artifact.
+
+**Default:** Uses the current workflow run.
+
+Set this input when you're running the action in a `workflow_run` (or any other) workflow that needs to pull artifacts from a *different* run. Example: `${{ github.event.workflow_run.id }}`.
+
+#### `artifact-source-repository`
+
+**Optional** Repository (`owner/name`) that owns the workflow run referenced by `artifact-source-run-id`.
+
+**Default:** Uses the repository that invokes the action.
+
+Only override this when your build workflow runs in another repository.
 
 #### `pr-number`
 
