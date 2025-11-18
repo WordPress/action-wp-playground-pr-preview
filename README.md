@@ -579,7 +579,7 @@ jobs:
 
       - name: Expose built artifact
         id: expose
-        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@main
+        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@v2
         with:
           artifact-name: ${{ steps.pr-metadata.outputs.artifact-name }}
           artifact-filename: gutenberg.zip
@@ -615,7 +615,7 @@ jobs:
           ARTIFACT_URL: ${{ steps.expose.outputs.artifact-url }}
 
       - name: Post Playground preview button
-        uses: WordPress/action-wp-playground-pr-preview@main
+        uses: WordPress/action-wp-playground-pr-preview@v2
         with:
           mode: append-to-description
           blueprint: ${{ steps.blueprint.outputs.blueprint }}
