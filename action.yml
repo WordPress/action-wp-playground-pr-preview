@@ -39,31 +39,7 @@ inputs:
       `pull-requests: write`, `contents: read`
   pr-number:
     type: string
-    description: Pull request number (optional, defaults to context.payload.pull_request.number)
-  pr-title:
-    type: string
-    description: Pull request title (optional, defaults to context.payload.pull_request.title)
-  pr-head-ref:
-    type: string
-    description: Pull request head branch ref (optional, defaults to context.payload.pull_request.head.ref)
-  pr-head-sha:
-    type: string
-    description: Pull request head SHA (optional, defaults to context.payload.pull_request.head.sha)
-  pr-base-ref:
-    type: string
-    description: Pull request base branch ref (optional, defaults to context.payload.pull_request.base.ref)
-  pr-body:
-    type: string
-    description: Pull request body/description (optional, defaults to context.payload.pull_request.body)
-  repo-owner:
-    type: string
-    description: Repository owner (optional, defaults to context.payload.repository.owner)
-  repo-name:
-    type: string
-    description: Repository name (optional, defaults to context.payload.repository.name)
-  repo-full-name:
-    type: string
-    description: Repository full name (optional, defaults to context.payload.repository.full_name)
+    description: Pull request number (optional, defaults to context.payload.pull_request.number). When provided, all PR details will be fetched from the GitHub API.
 
 secrets:
   github-token:
