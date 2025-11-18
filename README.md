@@ -458,155 +458,178 @@ steps:
 
 ## Advanced: Testing Built CI Artifacts
 
-If your plugin or theme requires a build step, you can use the `expose-artifact-on-public-url.yml` action to expose the artifacts created in your CI on a public URL that WordPress Playground can access.
-
-This action exposes built artifacts on a public URL. It helps WordPress
-Playground preview CI artifacts that are normally not accessible via a public URL.
- 
-Under the hood, it uses the GitHub releases feature. It creates a single public 
-draft release and uploads all the handled artifacts to that release. Note this
-means **one technical release in total**, not one per handled PR.
+If your plugin or theme requires a build step, you can use the `expose-artifact-on-public-url` action to publish CI artifacts on a URL that WordPress Playground can fetch. Under the hood the action uploads ZIP files to one draft release (shared across all PRs) and keeps only the most recent artifacts you tell it to keep.
 
 > **:warning: Important Notice:**  
-> Before using the preview button with artifacts you **must make the draft release public (i.e., mark it as pre-release or publish it)**. Only this action makes the artifact URL accessible to WordPress Playground.
+> Before using the preview button with artifacts you **must make the draft release public (publish it or flag it as a pre-release)**. Otherwise WordPress Playground cannot download the ZIP and the button fails.
 
+### Why two workflow files?
 
-This action also automatically cleans up old artifacts for the same PR, keeping
-only the N most recent.
+Pull requests from forks run with the more restrictive `pull_request` security model: they cannot access repository secrets, cannot write to releases, and cannot update PR descriptions. The safest pattern is therefore to split the process into two workflows:
 
-Here's how to use it:
+- `PR Playground Preview - Build` runs on every `pull_request` with the default read-only token. It builds your ZIP and uploads it as an artifact. Because forked PRs run this workflow in the base repository, the artifact always ends up in a trusted account even when the code came from a fork.
+- `PR Playground Preview - Publish` is triggered via `workflow_run` only after the build workflow succeeds. This job runs with `contents: write` and `pull-requests: write`, so it can expose the artifact on a release, generate a Playground blueprint, and update the PR description. It never checks out the untrusted code—it just manipulates artifacts produced by the build workflow.
+
+This separation keeps secrets and write permissions away from untrusted code while still giving fork contributors the same Playground experience.
+
+### Workflow 1: `PR Playground Preview - Build`
+
+Create `.github/workflows/pr-playground-preview-build.yml` (or similar) with a minimal set of permissions. The example below builds a Gutenberg ZIP and names the artifact with both the PR number and the head SHA so the publish workflow can map the correct preview back to the PR.
 
 ```yaml
-name: PR Preview with Build
+name: PR Playground Preview - Build
+
+# Use pull_request for untrusted code with read-only permissions
+# No access to secrets, no write permissions
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  build-plugin-zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Explicitly disable credential persistence for security
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+
+      - name: Build Gutenberg plugin zip
+        env:
+          NO_CHECKS: 1
+        run: npm run build:plugin-zip
+
+      - name: Upload Gutenberg plugin zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: gutenberg-plugin-zip-pr${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: gutenberg.zip
+          if-no-files-found: error
+```
+
+### Workflow 2: `PR Playground Preview - Publish`
+
+Create a second workflow (for example `.github/workflows/pr-playground-preview-publish.yml`) that listens for the build workflow to finish. Because it runs in a separate, privileged workflow you can safely grant it `contents: write` and `pull-requests: write`. The script step at the beginning finds the artifact that belongs to the originating PR, and the remaining steps expose the ZIP, build a blueprint, and append the Playground button to the PR description.
+
+```yaml
+name: PR Playground Preview - Publish
+
+# Use workflow_run for privileged operations
+# Runs with write permissions and access to secrets
+# Operates on artifacts from the unprivileged build workflow
+on:
+  workflow_run:
+    workflows: ["PR Playground Preview - Build"]
+    types:
+      - completed
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  # Build your plugin/theme
-  build:
+  publish-preview:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          npm install
-          npm run build
-          zip -r plugin.zip dist/
-      - uses: actions/upload-artifact@v4
-        with:
-          name: built-plugin
-          path: plugin.zip
-
-  # Expose the built artifact on a public URL
-  expose-build:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    # Only run if the build workflow succeeded and was triggered by a pull_request
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
     outputs:
       artifact-url: ${{ steps.expose.outputs.artifact-url }}
       artifact-name: ${{ steps.expose.outputs.artifact-name }}
     steps:
-      - name: Expose built artifact
-        id: expose
-        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@v2
-        with:
-          artifact-name: 'built-plugin'
-          pr-number: ${{ github.event.pull_request.number }}
-          commit-sha: ${{ github.sha }}
-          artifacts-to-keep: '2' # Number of most recent artifacts to keep for this PR. Use `keep-all` to keep all artifacts.
-
-  # Create the preview with the public URL
-  create-blueprint:
-    needs: expose-build
-    runs-on: ubuntu-latest
-    outputs:
-      blueprint: ${{ steps.blueprint.outputs.result }}
-    steps:
-      - uses: actions/github-script@v7
-        id: blueprint
+      - name: Extract PR metadata from artifact name
+        id: pr-metadata
+        uses: actions/github-script@v7
         with:
           script: |
-            const blueprint = {
-              steps: [{
-                step: "installPlugin",
-                pluginZipFile: {
-                  resource: "url",
-                  url: "${{ needs.expose-build.outputs.artifact-url }}"
-                }
-              }]
-            };
-            return JSON.stringify(blueprint);
-          result-encoding: string
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: ${{ github.event.workflow_run.id }},
+            });
 
-  preview:
-    needs: create-blueprint
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - uses: WordPress/action-wp-playground-pr-preview@v2
-        with:
-          blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-```
+            const artifact = artifacts.data.artifacts.find(a =>
+              a.name.startsWith("gutenberg-plugin-zip-pr")
+            );
 
-You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-built-artifact-example](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2).
+            if (!artifact) {
+              throw new Error('Could not find plugin artifact');
+            }
 
-### Publishing from a `workflow_run` job
+            // Parse: gutenberg-plugin-zip-pr123-abc123def...
+            const match = artifact.name.match(/^gutenberg-plugin-zip-pr(\d+)-(.+)$/);
+            if (!match) {
+              throw new Error(`Could not parse artifact name: ${artifact.name}`);
+            }
 
-Some repositories split their CI into two workflows:
+            const [, prNumber, commitSha] = match;
 
-1. A "build" workflow that runs on each pull request with default permissions and uploads artifacts
-2. A privileged "publish" workflow triggered via `workflow_run` that can write to releases and secrets
+            core.setOutput('pr-number', prNumber);
+            core.setOutput('commit-sha', commitSha);
+            core.setOutput('artifact-name', artifact.name);
 
-The `expose-artifact-on-public-url` action can now fetch artifacts directly from the originating workflow run—no more temporary "bridging" downloads or re-uploads. Simply provide the run ID (and optionally the repository) of the workflow that produced the artifact:
-
-```yaml
-name: PR Playground Preview – Publish
-on:
-  workflow_run:
-    workflows: ["PR Playground Preview – Build"]
-    types: [completed]
-
-jobs:
-  publish-preview:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
-    steps:
       - name: Expose built artifact
         id: expose
-        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@v2
+        uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@main
         with:
-          artifact-name: gutenberg-plugin-zip
+          artifact-name: ${{ steps.pr-metadata.outputs.artifact-name }}
           artifact-filename: gutenberg.zip
-          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
-          commit-sha: ${{ github.event.workflow_run.head_sha }}
+          pr-number: ${{ steps.pr-metadata.outputs.pr-number }}
+          commit-sha: ${{ steps.pr-metadata.outputs.commit-sha }}
           artifact-source-run-id: ${{ github.event.workflow_run.id }}
-          # Needed only when the build lives in a different repository
-          # artifact-source-repository: other-owner/other-repo
+          artifacts-to-keep: '2'
+
+      - name: Generate Playground blueprint JSON
+        id: blueprint
+        run: |
+          node - <<'NODE' >> "$GITHUB_OUTPUT"
+          const url = process.env.ARTIFACT_URL;
+          if (!url) {
+            throw new Error('ARTIFACT_URL is required');
+          }
+
+          const blueprint = {
+            steps: [
+              {
+                step: 'installPlugin',
+                pluginZipFile: {
+                  resource: 'url',
+                  url,
+                },
+              },
+            ],
+          };
+
+          console.log(`blueprint=${JSON.stringify(blueprint)}`);
+          NODE
+        env:
+          ARTIFACT_URL: ${{ steps.expose.outputs.artifact-url }}
 
       - name: Post Playground preview button
-        uses: WordPress/action-wp-playground-pr-preview@v2
+        uses: WordPress/action-wp-playground-pr-preview@main
         with:
           mode: append-to-description
-          blueprint: >-
-            {"steps":[{"step":"installPlugin","pluginZipFile":{"resource":"url","url":"${{ steps.expose.outputs.artifact-url }}"}}]}
-          pr-number: ${{ github.event.workflow_run.pull_requests[0].number }}
+          blueprint: ${{ steps.blueprint.outputs.blueprint }}
+          pr-number: ${{ steps.pr-metadata.outputs.pr-number }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-If you already emit metadata artifacts (for example, to handle multiple PRs per run), you can still download them before calling the action. The important change is that you no longer need intermediary steps to unzip and re-upload the build artifact just to make it available inside the privileged publish workflow.
+Key takeaways from this setup:
+
+- `artifact-source-run-id` tells the action to read artifacts created by the build workflow. You never need to redownload or re-upload ZIPs manually.
+- The naming convention `gutenberg-plugin-zip-pr${PR}-${SHA}` makes it trivial to recover the PR number and commit from inside the publish workflow.
+- `artifacts-to-keep` automatically prunes old ZIPs for the same PR so your release draft does not grow without bounds.
+
+You can adapt the same pattern for theme builds, different package managers, or multiple artifacts—just ensure the publish workflow can deterministically find the right artifact name for each PR.
 
 ### Expose Artifact Inputs
 
