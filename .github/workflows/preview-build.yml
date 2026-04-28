@@ -87,7 +87,7 @@ jobs:
           BLUEPRINT_FROM_BUILD: ${{ inputs.blueprint-from-build }}
         run: |
           set -euo pipefail
-          bundle="$GITHUB_WORKSPACE/.wp-playground-preview"
+          bundle="$GITHUB_WORKSPACE/wp-playground-preview-bundle"
           rm -rf "$bundle"
           mkdir -p "$bundle/zips"
 
@@ -140,5 +140,5 @@ jobs:
           # Single bundle keeps upload-artifact's static step count happy and
           # the publish workflow only needs to find one artifact, not N.
           name: wp-playground-preview-pr${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
-          path: .wp-playground-preview/
+          path: wp-playground-preview-bundle/
           if-no-files-found: error
