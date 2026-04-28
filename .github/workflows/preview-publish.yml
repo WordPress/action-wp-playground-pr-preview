@@ -219,12 +219,17 @@ jobs:
             const fs = require('fs');
             const urls = JSON.parse(fs.readFileSync(process.env.MAPPING_FILE, 'utf8'));
 
+            // Placeholders always live inside a JSON string context
+            // ("url": "{{ARTIFACT_URL:foo}}"), so emit the URL as
+            // JSON.stringify minus the outer quotes — that gives proper
+            // escaping for ", \, and control chars without changing the
+            // caller-side `"{{...}}"` convention.
             const substitute = (template) =>
               template.replace(/\{\{\s*ARTIFACT_URL:([a-zA-Z0-9_-]+)\s*\}\}/g, (_, name) => {
                 if (!(name in urls)) {
                   throw new Error(`Blueprint references unknown artifact: ${name}. Available: ${Object.keys(urls).join(', ') || '(none)'}`);
                 }
-                return urls[name];
+                return JSON.stringify(urls[name]).slice(1, -1);
               });
 
             let blueprint;
