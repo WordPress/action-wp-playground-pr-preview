@@ -35,6 +35,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+> **Fork PRs:** The baseline workflow uses `pull_request`. GitHub makes `GITHUB_TOKEN` read-only for pull requests from forks, so the action may not be able to update fork PR descriptions or comments. See [Forked pull requests](#forked-pull-requests) before switching to `pull_request_target`.
+
 > **Important:** `WordPress/action-wp-playground-pr-preview@v2` is a regular action. Always reference it inside a job step (under `jobs.<job_id>.steps`). GitHub only allows `jobs.<job_id>.uses` for reusable workflows that point to another workflow file such as `owner/repo/.github/workflows/workflow.yml@ref`.
 
 ## Examples
@@ -115,8 +117,11 @@ jobs:
                   step: "installPlugin",
                   pluginData: {
                     resource: "git:directory",
-                    url: `https://github.com/${context.repo.owner}/${context.repo.repo}.git`,
-                    ref: context.payload.pull_request.head.ref,
+                    // Use the PR head repo, not context.repo. PRs from forks
+                    // live on the contributor's fork, not the base repository.
+                    url: `https://github.com/${context.payload.pull_request.head.repo.full_name}.git`,
+                    ref: context.payload.pull_request.head.sha,
+                    refType: "commit",
                     path: "/"
                   }
                 },
@@ -145,6 +150,32 @@ jobs:
           blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+### Forked pull requests
+
+Use `pull_request` by default. If you need the action to update PR descriptions or comments on pull requests from forks, GitHub requires a privileged workflow such as `pull_request_target`:
+
+```yaml
+name: PR Preview
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Post Playground Preview Button
+        uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          plugin-path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Treat `pull_request_target` as privileged. Use it only for metadata-only preview publishing workflows that do **not** check out PR code, run PR-controlled files, install PR dependencies, load a blueprint from the PR branch, or pass PR-controlled values into shell commands. Keep permissions as narrow as possible (`contents: read` and `pull-requests: write` for this action). If the preview needs Composer, npm, tests, or any other execution of PR code, use the two-workflow artifact pattern in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-ci-artifacts).
 
 ### External Blueprint URL
 
@@ -320,6 +351,9 @@ The template supports variable interpolation using `{{VARIABLE_NAME}}` syntax (c
 - `{{PR_TITLE}}` - Pull request title
 - `{{PR_HEAD_REF}}` - Source branch name
 - `{{PR_HEAD_SHA}}` - Latest commit SHA
+- `{{PR_HEAD_REPO_OWNER}}` - Source repository owner username/org
+- `{{PR_HEAD_REPO_NAME}}` - Source repository name
+- `{{PR_HEAD_REPO_FULL_NAME}}` - Source repository full name (owner/repo)
 - `{{PR_BASE_REF}}` - Target branch name
 - `{{REPO_OWNER}}` - Repository owner username/org
 - `{{REPO_NAME}}` - Repository name
@@ -755,7 +789,7 @@ As mentioned in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-c
 
 ### Workflow fails with "Resource not accessible by integration"
 
-Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. Add the permissions block from the basic example or provide a PAT with the same scopes. Without those permissions GitHub blocks the API call and you will see this error in the `Post Playground Preview Button` step.
+Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. For fork PRs, `pull_request` workflows get a read-only `GITHUB_TOKEN` even when you request write permissions. Use `pull_request_target` only for the constrained metadata-only workflow described in [Forked pull requests](#forked-pull-requests). If you need a build step or any execution of PR code, use the two-workflow artifact pattern above.
 
 ### Step fails with "You must configure plugin-path/theme-path/blueprint"
 

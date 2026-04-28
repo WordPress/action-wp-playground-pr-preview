@@ -31793,6 +31793,106 @@ function parseParams (str) {
 module.exports = parseParams
 
 
+/***/ }),
+
+/***/ 4307:
+/***/ ((module) => {
+
+function normalizePath(path) {
+  const raw = (path || "").trim();
+  if (!raw || raw === "." || raw === "./") {
+    return "";
+  }
+  return raw.replace(/^\.\/+/, "").replace(/^\/+|\/+$/g, "");
+}
+
+function sanitizeSlug(value, fallback) {
+  if (!value) return fallback;
+  const cleaned = value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || fallback;
+}
+
+function inferSlug(path, fallback) {
+  const clean = normalizePath(path).split("/").filter(Boolean).pop();
+  if (!clean || clean === "." || clean === "..") return fallback;
+  return sanitizeSlug(clean, fallback);
+}
+
+function getRepoOwner(repo, fallback) {
+  return repo?.owner?.login || repo?.owner?.name || repo?.owner?.id || fallback;
+}
+
+function getPullRequestHeadRepository(
+  pr,
+  fallbackRepo,
+  fallbackOwner,
+  fallbackRepoName,
+) {
+  const headRepo = pr.head?.repo || fallbackRepo || {};
+  const owner = getRepoOwner(headRepo, fallbackOwner);
+  const name = headRepo.name || fallbackRepoName;
+  const fullName = headRepo.full_name || `${owner}/${name}`;
+
+  return {
+    owner,
+    name,
+    fullName,
+    gitUrl: `https://github.com/${fullName}.git`,
+  };
+}
+
+function buildAutoBlueprint({ pluginPath, themePath, repoGitUrl, ref }) {
+  const steps = [];
+  const gitDirectoryResource = (path) => ({
+    resource: "git:directory",
+    url: repoGitUrl,
+    ref,
+    refType: "commit",
+    path: normalizePath(path) || "/",
+  });
+
+  if (pluginPath) {
+    steps.push({
+      step: "installPlugin",
+      pluginData: gitDirectoryResource(pluginPath),
+      options: {
+        activate: true,
+      },
+    });
+  }
+
+  if (themePath) {
+    steps.push({
+      step: "installTheme",
+      themeData: gitDirectoryResource(themePath),
+      options: {
+        activate: true,
+      },
+    });
+  }
+
+  return JSON.stringify({
+    $schema: "https://playground.wordpress.net/blueprint-schema.json",
+    preferredVersions: {
+      php: "8.2",
+      wp: "latest",
+    },
+    steps,
+  });
+}
+
+module.exports = {
+  buildAutoBlueprint,
+  getPullRequestHeadRepository,
+  inferSlug,
+  normalizePath,
+  sanitizeSlug,
+};
+
+
 /***/ })
 
 /******/ 	});
@@ -31836,6 +31936,12 @@ module.exports = parseParams
 var __webpack_exports__ = {};
 const core = __nccwpck_require__(7484);
 const githubLib = __nccwpck_require__(3228);
+const {
+  buildAutoBlueprint,
+  getPullRequestHeadRepository,
+  inferSlug,
+  sanitizeSlug,
+} = __nccwpck_require__(4307);
 
 (async () => {
   const context = githubLib.context;
@@ -31894,6 +32000,10 @@ const githubLib = __nccwpck_require__(3228);
   const prTitle = pr.title;
   const headRef = pr.head.ref;
   const headSha = pr.head.sha;
+  const headRepo = getPullRequestHeadRepository(pr, repo, owner, repoName);
+  const headRepoOwner = headRepo.owner;
+  const headRepoName = headRepo.name;
+  const headRepoFullName = headRepo.fullName;
   const baseRef = pr.base.ref;
 
   const playgroundHostRaw = core.getInput('playground-host', {required: false}) || 'https://playground.wordpress.net';
@@ -31928,87 +32038,21 @@ const githubLib = __nccwpck_require__(3228);
 
   const archiveBranchSegment = headRef.replace(/[^0-9A-Za-z]/g, '-');
   const repoArchiveRoot = `${repoName}-${archiveBranchSegment}`;
-  const repoGitUrl = `https://github.com/${repoFullName}.git`;
-
-  const normalizePath = (path) => {
-    const raw = (path || '').trim();
-    if (!raw || raw === '.' || raw === './') {
-  	return '';
-    }
-    return raw.replace(/^\.\/+/, '').replace(/^\/+|\/+$/g, '');
-  };
-  const sanitizeSlug = (value, fallback) => {
-    if (!value) return fallback;
-    const cleaned = value
-  	.toLowerCase()
-  	.replace(/[^a-z0-9-]+/g, '-')
-  	.replace(/^-+|-+$/g, '');
-    return cleaned || fallback;
-  };
   const repoSlug = sanitizeSlug(repoName, 'project');
-  const inferSlug = (path, fallback) => {
-    const clean = normalizePath(path).split('/').filter(Boolean).pop();
-    if (!clean || clean === '.' || clean === '..') return fallback;
-    return sanitizeSlug(clean, fallback);
-  };
 
   const pluginSlug = pluginPath ? inferSlug(pluginPath, repoSlug) : '';
   const themeSlug = themePath ? inferSlug(themePath, `${repoSlug}-theme`) : '';
-
-  const buildAutoBlueprint = () => {
-    const steps = [];
-
-    if (pluginPath) {
-  	steps.push(
-  	  {
-  		step: 'installPlugin',
-  		pluginData: {
-  		  resource: 'git:directory',
-  		  url: repoGitUrl,
-  		  ref: headRef,
-  		  path: normalizePath(pluginPath) || "/"
-  		},
-  		options: {
-  		  activate: true
-  		}
-  	  }
-  	);
-    }
-
-    if (themePath) {
-  	steps.push(
-  	  {
-  		step: 'installTheme',
-  		themeData: {
-  		  resource: 'git:directory',
-  		  url: repoGitUrl,
-  		  ref: headRef,
-  		  path: normalizePath(themePath) || "/"
-  		},
-  		options: {
-  		  activate: true
-  		}
-  	  }
-  	);
-    }
-
-    return JSON.stringify(
-  	{
-  	  $schema: 'https://playground.wordpress.net/blueprint-schema.json',
-  	  preferredVersions: {
-  		php: '8.2',
-  		wp: 'latest'
-  	  },
-  	  steps
-  	}
-    );
-  };
 
   let blueprintJson = '';
   if (blueprintInput && blueprintInput.trim().length) {
     blueprintJson = blueprintInput.trim();
   } else if (pluginPath || themePath) {
-    blueprintJson = buildAutoBlueprint();
+    blueprintJson = buildAutoBlueprint({
+      pluginPath,
+      themePath,
+      repoGitUrl: headRepo.gitUrl,
+      ref: headSha,
+    });
   }
 
   if (blueprintJson) {
@@ -32089,6 +32133,9 @@ const githubLib = __nccwpck_require__(3228);
     PR_TITLE: prTitle,
     PR_HEAD_REF: headRef,
     PR_HEAD_SHA: headSha,
+    PR_HEAD_REPO_OWNER: headRepoOwner,
+    PR_HEAD_REPO_NAME: headRepoName,
+    PR_HEAD_REPO_FULL_NAME: headRepoFullName,
     PR_BASE_REF: baseRef,
     REPO_OWNER: owner,
     REPO_NAME: repoName,
