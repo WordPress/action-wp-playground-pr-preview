@@ -13,7 +13,7 @@ To enable the "Try it in Playground" button, create a `.github/workflows/pr-prev
 ```yaml
 name: PR Preview
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-> **Security note:** The basic workflow above intentionally does not check out or run PR code. It only reads pull request metadata, builds a Playground URL that points at the PR head repository and commit, and updates the pull request description or comment. Keep build steps in a separate `pull_request` workflow; see [Advanced: Testing Built CI Artifacts](#advanced-testing-built-ci-artifacts).
+> **Fork PRs:** The baseline workflow uses `pull_request`. GitHub makes `GITHUB_TOKEN` read-only for pull requests from forks, so the action may not be able to update fork PR descriptions or comments. See [Forked pull requests](#forked-pull-requests) before switching to `pull_request_target`.
 
 > **Important:** `WordPress/action-wp-playground-pr-preview@v2` is a regular action. Always reference it inside a job step (under `jobs.<job_id>.steps`). GitHub only allows `jobs.<job_id>.uses` for reusable workflows that point to another workflow file such as `owner/repo/.github/workflows/workflow.yml@ref`.
 
@@ -54,7 +54,7 @@ See the [preview-in-playground-button-built-artifact-example](#advanced-testing-
 ```yaml
 name: PR Preview
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -96,7 +96,7 @@ For advanced configurations, you can provide a custom blueprint:
 ```yaml
 name: PR Playground Preview
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -150,6 +150,32 @@ jobs:
           blueprint: ${{ needs.create-blueprint.outputs.blueprint }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+### Forked pull requests
+
+Use `pull_request` by default. If you need the action to update PR descriptions or comments on pull requests from forks, GitHub requires a privileged workflow such as `pull_request_target`:
+
+```yaml
+name: PR Preview
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Post Playground Preview Button
+        uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          plugin-path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Treat `pull_request_target` as privileged. Use it only for metadata-only preview publishing workflows that do **not** check out PR code, run PR-controlled files, install PR dependencies, load a blueprint from the PR branch, or pass PR-controlled values into shell commands. Keep permissions as narrow as possible (`contents: read` and `pull-requests: write` for this action). If the preview needs Composer, npm, tests, or any other execution of PR code, use the two-workflow artifact pattern in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-ci-artifacts).
 
 ### External Blueprint URL
 
@@ -763,7 +789,7 @@ As mentioned in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-c
 
 ### Workflow fails with "Resource not accessible by integration"
 
-Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. For fork PRs, `pull_request` workflows get a read-only `GITHUB_TOKEN` even when you request write permissions. Use the basic `pull_request_target` workflow when the action only posts the preview button and does not check out or execute PR code. If you need a build step, use the two-workflow artifact pattern above.
+Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. For fork PRs, `pull_request` workflows get a read-only `GITHUB_TOKEN` even when you request write permissions. Use `pull_request_target` only for the constrained metadata-only workflow described in [Forked pull requests](#forked-pull-requests). If you need a build step or any execution of PR code, use the two-workflow artifact pattern above.
 
 ### Step fails with "You must configure plugin-path/theme-path/blueprint"
 
