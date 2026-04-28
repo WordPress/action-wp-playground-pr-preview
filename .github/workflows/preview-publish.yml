@@ -1,0 +1,306 @@
+name: WordPress Playground Preview - Publish (reusable)
+
+# Reusable workflow that publishes a built artifact bundle from
+# `preview-build.yml` to a public release and posts the Preview button.
+#
+# MUST be invoked from a `workflow_run` trigger so it can run with
+# `contents: write` + `pull-requests: write` even when the originating PR
+# came from a fork. Any other trigger is rejected at runtime.
+
+on:
+  workflow_call:
+    inputs:
+      blueprint:
+        description: |
+          Blueprint JSON template. May contain `{{ARTIFACT_URL:<name>}}`
+          placeholders that will be replaced with public URLs of the matching
+          zips from the build artifact bundle. Mutually exclusive with `kind`
+          and `blueprint-from-artifact`.
+        required: false
+        type: string
+        default: ''
+      kind:
+        description: |
+          Shortcut for the common single-zip case: `plugin` or `theme`. When
+          set, exactly one zip is required in the artifact bundle and a
+          default install+activate blueprint is generated. Mutually exclusive
+          with `blueprint` and `blueprint-from-artifact`.
+        required: false
+        type: string
+        default: ''
+      blueprint-from-artifact:
+        description: |
+          When `true`, read the blueprint template from `blueprint.json`
+          inside the build artifact bundle. Use this with
+          `preview-build.yml`'s `blueprint-from-build:` input when the
+          blueprint must vary per PR. Mutually exclusive with `blueprint`
+          and `kind`.
+        required: false
+        type: boolean
+        default: false
+      artifacts-to-keep:
+        description: 'How many recent artifact sets to keep per PR.'
+        required: false
+        type: string
+        default: '2'
+      release-tag:
+        description: 'Release tag used to host artifacts publicly.'
+        required: false
+        type: string
+        default: 'ci-artifacts'
+      mode:
+        description: '`append-to-description` or `comment`.'
+        required: false
+        type: string
+        default: 'append-to-description'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run'
+    steps:
+      - name: Guard against misuse
+        # Defense in depth: the job-level `if` already gates on workflow_run,
+        # but we also want a loud failure (not a silent skip) if a caller
+        # wires this up via pull_request_target or schedule.
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_EVENT: ${{ github.event.workflow_run.event }}
+          WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "workflow_run" ]; then
+            echo "::error::preview-publish.yml must be invoked from a workflow_run trigger." >&2
+            exit 1
+          fi
+          if [ "$WORKFLOW_RUN_EVENT" != "pull_request" ]; then
+            echo "Source workflow was not a pull_request ($WORKFLOW_RUN_EVENT); skipping."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [ "$WORKFLOW_RUN_CONCLUSION" != "success" ]; then
+            echo "Source workflow did not succeed ($WORKFLOW_RUN_CONCLUSION); skipping."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+      - name: Validate inputs
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          BLUEPRINT: ${{ inputs.blueprint }}
+          KIND: ${{ inputs.kind }}
+          FROM_ARTIFACT: ${{ inputs.blueprint-from-artifact }}
+        run: |
+          set -euo pipefail
+          set_count=0
+          [ -n "$BLUEPRINT" ] && set_count=$((set_count + 1))
+          [ -n "$KIND" ] && set_count=$((set_count + 1))
+          [ "$FROM_ARTIFACT" = "true" ] && set_count=$((set_count + 1))
+          if [ "$set_count" -ne 1 ]; then
+            echo "::error::Provide exactly one of: blueprint, kind, blueprint-from-artifact." >&2
+            exit 1
+          fi
+          if [ -n "$KIND" ] && [ "$KIND" != "plugin" ] && [ "$KIND" != "theme" ]; then
+            echo "::error::kind must be 'plugin' or 'theme', got: $KIND" >&2
+            exit 1
+          fi
+
+      - name: Identify artifact bundle
+        id: meta
+        if: env.SKIP != '1'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        with:
+          script: |
+            const runId = Number(process.env.SOURCE_RUN_ID);
+            const list = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            const a = list.data.artifacts.find(x =>
+              /^wp-playground-preview-pr\d+-[0-9a-f]+$/i.test(x.name)
+            );
+            if (!a) {
+              throw new Error('No wp-playground-preview-pr* bundle found in source run.');
+            }
+            const m = a.name.match(/^wp-playground-preview-pr(\d+)-(.+)$/);
+            if (!m) throw new Error(`Cannot parse artifact name: ${a.name}`);
+            core.setOutput('artifact-id', String(a.id));
+            core.setOutput('artifact-name', a.name);
+            core.setOutput('pr-number', m[1]);
+            core.setOutput('commit-sha', m[2]);
+
+      - name: Download artifact bundle
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          ARTIFACT_ID: ${{ steps.meta.outputs.artifact-id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p bundle
+          gh api -X GET "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > bundle.zip
+          unzip -oq bundle.zip -d bundle
+          ls -R bundle
+
+      - name: Ensure release exists
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            exit 0
+          fi
+          # Prerelease (not draft): download URLs are public, so the preview
+          # button works on first run without a manual publish step.
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --notes "Automated prerelease for WordPress Playground CI artifacts"
+
+      - name: Upload zips and resolve URLs
+        id: urls
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          PR_NUMBER: ${{ steps.meta.outputs.pr-number }}
+          COMMIT_SHA: ${{ steps.meta.outputs.commit-sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mapping_file="$RUNNER_TEMP/artifact-urls.json"
+          echo '{}' > "$mapping_file"
+          for src in bundle/zips/*.zip; do
+            name="$(basename "$src" .zip)"
+            asset="pr-${PR_NUMBER}-${COMMIT_SHA}-${name}.zip"
+            cp "$src" "$asset"
+            gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${asset}"
+            node -e '
+              const fs = require("fs");
+              const f = process.argv[1], k = process.argv[2], v = process.argv[3];
+              const j = JSON.parse(fs.readFileSync(f, "utf8"));
+              j[k] = v;
+              fs.writeFileSync(f, JSON.stringify(j));
+            ' "$mapping_file" "$name" "$url"
+            echo "Exposed: $name -> $url"
+          done
+          echo "mapping-file=$mapping_file" >> "$GITHUB_OUTPUT"
+          echo "first-name=$(node -e 'const j=require(process.argv[1]);console.log(Object.keys(j)[0]||"")' "$mapping_file")" >> "$GITHUB_OUTPUT"
+          echo "count=$(node -e 'console.log(Object.keys(require(process.argv[1])).length)' "$mapping_file")" >> "$GITHUB_OUTPUT"
+
+      - name: Render blueprint
+        id: blueprint
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          BLUEPRINT_INPUT: ${{ inputs.blueprint }}
+          KIND: ${{ inputs.kind }}
+          FROM_ARTIFACT: ${{ inputs.blueprint-from-artifact }}
+          MAPPING_FILE: ${{ steps.urls.outputs.mapping-file }}
+          FIRST_NAME: ${{ steps.urls.outputs.first-name }}
+          COUNT: ${{ steps.urls.outputs.count }}
+        run: |
+          set -euo pipefail
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+            const fs = require('fs');
+            const urls = JSON.parse(fs.readFileSync(process.env.MAPPING_FILE, 'utf8'));
+
+            const substitute = (template) =>
+              template.replace(/\{\{\s*ARTIFACT_URL:([a-zA-Z0-9_-]+)\s*\}\}/g, (_, name) => {
+                if (!(name in urls)) {
+                  throw new Error(`Blueprint references unknown artifact: ${name}. Available: ${Object.keys(urls).join(', ') || '(none)'}`);
+                }
+                return urls[name];
+              });
+
+            let blueprint;
+            if (process.env.FROM_ARTIFACT === 'true') {
+              const bp = 'bundle/blueprint.json';
+              if (!fs.existsSync(bp)) {
+                throw new Error('blueprint-from-artifact: true but bundle/blueprint.json was not in the artifact.');
+              }
+              blueprint = substitute(fs.readFileSync(bp, 'utf8'));
+            } else if (process.env.BLUEPRINT_INPUT) {
+              blueprint = substitute(process.env.BLUEPRINT_INPUT);
+            } else {
+              const kind = process.env.KIND;
+              const count = Number(process.env.COUNT || 0);
+              if (count !== 1) {
+                throw new Error(`kind shortcut requires exactly one artifact, found ${count}. Use blueprint: or blueprint-from-artifact: for multi-zip setups.`);
+              }
+              const name = process.env.FIRST_NAME;
+              const step = kind === 'theme' ? 'installTheme' : 'installPlugin';
+              const dataKey = kind === 'theme' ? 'themeZipFile' : 'pluginZipFile';
+              blueprint = JSON.stringify({
+                $schema: 'https://playground.wordpress.net/blueprint-schema.json',
+                steps: [{
+                  step,
+                  [dataKey]: { resource: 'url', url: urls[name] },
+                  options: { activate: true },
+                }],
+              });
+            }
+
+            // Validate parseability before handing off.
+            JSON.parse(blueprint);
+            // Single-line for safe `>>` into $GITHUB_OUTPUT.
+            console.log('blueprint=' + JSON.stringify(JSON.parse(blueprint)));
+          NODE
+
+      - name: Cleanup old artifacts
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          PR_NUMBER: ${{ steps.meta.outputs.pr-number }}
+          ARTIFACTS_TO_KEEP: ${{ inputs.artifacts-to-keep }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$ARTIFACTS_TO_KEEP" = "keep-all" ]; then exit 0; fi
+          # Group assets by SHA so each PR keeps N most recent commit sets,
+          # not N individual zips (a single commit may upload several zips).
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.created_at)|\(.name)\"" \
+            > pr-assets.txt || true
+          [ -s pr-assets.txt ] || exit 0
+
+          # Extract the SHA segment (pr-<N>-<SHA>-<rest>.zip) and find the
+          # most-recent ARTIFACTS_TO_KEEP distinct SHAs. Anything else gets pruned.
+          sort -r pr-assets.txt | awk -F'|' -v keep="$ARTIFACTS_TO_KEEP" '
+            {
+              name=$2;
+              # pr-<n>-<sha>-... → split on "-", take field 3
+              n=split(name, p, "-");
+              sha=p[3];
+              if (!(sha in seen)) { seen[sha]=++distinct }
+              if (seen[sha] > keep) print name;
+            }
+          ' > to-delete.txt
+          while IFS= read -r asset; do
+            [ -z "$asset" ] && continue
+            gh release delete-asset "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes || true
+          done < to-delete.txt
+
+      - name: Post Playground preview button
+        if: env.SKIP != '1'
+        uses: WordPress/action-wp-playground-pr-preview@v2
+        with:
+          mode: ${{ inputs.mode }}
+          blueprint: ${{ steps.blueprint.outputs.blueprint }}
+          pr-number: ${{ steps.meta.outputs.pr-number }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
