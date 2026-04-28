@@ -41,6 +41,14 @@ on:
         required: false
         type: string
         default: ''
+      fetch-depth:
+        description: |
+          actions/checkout `fetch-depth` value. Defaults to 1 (shallow).
+          Set to 0 when the build needs to diff against the base ref
+          (e.g. selective monorepo previews).
+        required: false
+        type: number
+        default: 1
       blueprint-from-build:
         description: |
           Optional path to a `blueprint.json` written by the build command.
@@ -63,6 +71,7 @@ jobs:
         with:
           # Untrusted code: never persist credentials.
           persist-credentials: false
+          fetch-depth: ${{ inputs.fetch-depth }}
 
       - if: ${{ inputs.node-version != '' }}
         uses: actions/setup-node@v4
