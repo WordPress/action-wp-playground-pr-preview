@@ -13,7 +13,7 @@ To enable the "Try it in Playground" button, create a `.github/workflows/pr-prev
 ```yaml
 name: PR Preview
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -35,6 +35,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+> **Security note:** The basic workflow above intentionally does not check out or run PR code. It only reads pull request metadata, builds a Playground URL that points at the PR head repository and commit, and updates the pull request description or comment. Keep build steps in a separate `pull_request` workflow; see [Advanced: Testing Built CI Artifacts](#advanced-testing-built-ci-artifacts).
+
 > **Important:** `WordPress/action-wp-playground-pr-preview@v2` is a regular action. Always reference it inside a job step (under `jobs.<job_id>.steps`). GitHub only allows `jobs.<job_id>.uses` for reusable workflows that point to another workflow file such as `owner/repo/.github/workflows/workflow.yml@ref`.
 
 ## Examples
@@ -52,7 +54,7 @@ See the [preview-in-playground-button-built-artifact-example](#advanced-testing-
 ```yaml
 name: PR Preview
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -94,7 +96,7 @@ For advanced configurations, you can provide a custom blueprint:
 ```yaml
 name: PR Playground Preview
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, edited]
 
 jobs:
@@ -115,8 +117,11 @@ jobs:
                   step: "installPlugin",
                   pluginData: {
                     resource: "git:directory",
-                    url: `https://github.com/${context.repo.owner}/${context.repo.repo}.git`,
-                    ref: context.payload.pull_request.head.ref,
+                    // Use the PR head repo, not context.repo. PRs from forks
+                    // live on the contributor's fork, not the base repository.
+                    url: `https://github.com/${context.payload.pull_request.head.repo.full_name}.git`,
+                    ref: context.payload.pull_request.head.sha,
+                    refType: "commit",
                     path: "/"
                   }
                 },
@@ -320,6 +325,9 @@ The template supports variable interpolation using `{{VARIABLE_NAME}}` syntax (c
 - `{{PR_TITLE}}` - Pull request title
 - `{{PR_HEAD_REF}}` - Source branch name
 - `{{PR_HEAD_SHA}}` - Latest commit SHA
+- `{{PR_HEAD_REPO_OWNER}}` - Source repository owner username/org
+- `{{PR_HEAD_REPO_NAME}}` - Source repository name
+- `{{PR_HEAD_REPO_FULL_NAME}}` - Source repository full name (owner/repo)
 - `{{PR_BASE_REF}}` - Target branch name
 - `{{REPO_OWNER}}` - Repository owner username/org
 - `{{REPO_NAME}}` - Repository name
@@ -755,7 +763,7 @@ As mentioned in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-c
 
 ### Workflow fails with "Resource not accessible by integration"
 
-Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. Add the permissions block from the basic example or provide a PAT with the same scopes. Without those permissions GitHub blocks the API call and you will see this error in the `Post Playground Preview Button` step.
+Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. For fork PRs, `pull_request` workflows get a read-only `GITHUB_TOKEN` even when you request write permissions. Use the basic `pull_request_target` workflow when the action only posts the preview button and does not check out or execute PR code. If you need a build step, use the two-workflow artifact pattern above.
 
 ### Step fails with "You must configure plugin-path/theme-path/blueprint"
 
