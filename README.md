@@ -456,12 +456,223 @@ steps:
 
 ---
 
-## Advanced: Testing Built CI Artifacts
+## v3: Reusable workflows for built artifacts
+
+If your plugin or theme requires a build step (Composer, npm, Vite, webpack, etc.), v3 introduces a pair of **reusable workflows** that compress the old hand-rolled two-file pattern from ~107 lines of caller-side YAML down to ~14. Same security model, same trigger split, much less to type and easier to keep in sync across repos.
+
+> **For no-build plugins/themes**, keep using the v2 action directly with `plugin-path:` / `theme-path:` / `blueprint:`. The reusable workflows are specifically for cases that need to run a build in CI before Playground can install the result.
+
+### Quick start (single plugin or theme with a build step)
+
+Two workflow files in the consuming repo:
+
+```yaml
+# .github/workflows/pr-preview-build.yml
+name: PR Preview - Build
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+jobs:
+  build:
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
+    with:
+      artifacts: my-plugin=build/my-plugin.zip
+      node-version: '20'
+      build-command: |
+        npm ci
+        npm run build:plugin-zip
+```
+
+```yaml
+# .github/workflows/pr-preview-publish.yml
+name: PR Preview - Publish
+on:
+  workflow_run:
+    workflows: ["PR Preview - Build"]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  publish:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    with:
+      kind: plugin   # or: kind: theme
+```
+
+That's the whole thing. Open a PR, the build workflow runs in the read-only `pull_request` context, the publish workflow runs in the privileged `workflow_run` context, the preview button lands on the PR description.
+
+### Why two workflow files?
+
+Same reason as the previous advanced pattern. Pull requests from forks cannot access secrets, cannot write to releases, and cannot update PR descriptions. The split keeps untrusted PR code in a read-only context and confines write permissions to a separate `workflow_run`-triggered workflow that only manipulates already-produced artifacts. Reusable workflows do not collapse the two files — that's a GitHub trigger-permission constraint, not an action one.
+
+### Three blueprint modes
+
+The publish workflow accepts exactly one of three mutually-exclusive blueprint sources:
+
+| Mode | When to use | Caller writes |
+|---|---|---|
+| `kind: plugin` / `kind: theme` | Single-zip plugin or theme | nothing extra |
+| `blueprint:` *(template)* | Monorepo with fixed activation set; companion plugins; version pins; seed data | one inline JSON template with `{{ARTIFACT_URL:<name>}}` placeholders |
+| `blueprint-from-artifact: true` | Per-PR variable shape (e.g. install only the changed plugin in a monorepo) | a build-time script that writes `blueprint.json` |
+
+#### `blueprint:` template example (monorepo, both plugins always activated)
+
+```yaml
+# build
+artifacts: |
+  site-toolkit=build/site-toolkit.zip
+  site-analytics=build/site-analytics.zip
+build-command: |
+  for slug in site-toolkit site-analytics; do
+    ( cd "plugins/$slug" && zip -r "../../build/$slug.zip" . )
+  done
+```
+
+```yaml
+# publish
+blueprint: |
+  {
+    "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+    "steps": [
+      { "step": "installPlugin",
+        "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-toolkit}}" },
+        "options": { "activate": true } },
+      { "step": "installPlugin",
+        "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-analytics}}" },
+        "options": { "activate": true } }
+    ]
+  }
+```
+
+`{{ARTIFACT_URL:<name>}}` substitution is JSON-string-safe — the placeholder is escaped via `JSON.stringify` so quotes, backslashes, and control characters in the URL are properly encoded. The caller-side `"{{...}}"` quoting convention stays the same.
+
+#### `blueprint-from-artifact: true` example (install only the changed plugin)
+
+The build job writes a tailored `blueprint.json` based on `git diff`. Use `fetch-depth: 0` so the diff has full history.
+
+```yaml
+# build
+fetch-depth: 0
+artifacts: |
+  alpha=build/alpha.zip
+  beta=build/beta.zip
+blueprint-from-build: blueprint.json
+build-command: |
+  # Always build both zips (cheap), let the blueprint decide what to install.
+  for slug in alpha beta; do
+    ( cd "plugins/$slug" && zip -r "../../build/$slug.zip" . )
+  done
+  git fetch --no-tags --depth=50 origin "$GITHUB_BASE_REF"
+  changed=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" \
+    | awk -F/ '/^plugins\// {print $2}' | sort -u)
+  node - "$changed" <<'NODE' > blueprint.json
+  const slugs = (process.argv[2] || '').split(/\s+/).filter(Boolean);
+  process.stdout.write(JSON.stringify({
+    $schema: 'https://playground.wordpress.net/blueprint-schema.json',
+    steps: (slugs.length ? slugs : ['alpha', 'beta']).map(s => ({
+      step: 'installPlugin',
+      pluginZipFile: { resource: 'url', url: '{{ARTIFACT_URL:' + s + '}}' },
+      options: { activate: true },
+    })),
+  }));
+  NODE
+```
+
+```yaml
+# publish
+blueprint-from-artifact: true
+```
+
+### `preview-build.yml` inputs
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `artifacts` | yes | — | Newline-separated `name=path` entries. `name` becomes the slug used in `{{ARTIFACT_URL:<name>}}`. `path` is relative to `working-directory`. |
+| `build-command` | yes | — | Shell command that produces every path listed in `artifacts`. |
+| `working-directory` | no | `.` | Working directory for the build command. |
+| `node-version` | no | *unset* | If set, runs `actions/setup-node@v4` before the build. |
+| `php-version` | no | *unset* | If set, runs `shivammathur/setup-php@v2` before the build. |
+| `fetch-depth` | no | `1` | `actions/checkout` `fetch-depth` value. Set to `0` when the build needs to diff against the base ref. |
+| `blueprint-from-build` | no | *unset* | Path to a `blueprint.json` written by the build command. Bundled with the artifact for use with `blueprint-from-artifact: true`. |
+
+### `preview-publish.yml` inputs
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `blueprint` | one of three | — | JSON template with `{{ARTIFACT_URL:<name>}}` placeholders. |
+| `kind` | one of three | — | `plugin` or `theme`. Generates a default install+activate blueprint for the single artifact. |
+| `blueprint-from-artifact` | one of three | `false` | Read `blueprint.json` from the build artifact bundle. |
+| `artifacts-to-keep` | no | `2` | How many recent artifact sets to keep per PR. Set to `keep-all` to disable cleanup. |
+| `release-tag` | no | `ci-artifacts` | Release tag used to host artifacts publicly. Created automatically as a prerelease (public download URL on first run). |
+| `mode` | no | `append-to-description` | `append-to-description` or `comment`. |
+
+### Caller permissions
+
+The build job inherits its permissions from the caller's `pull_request` workflow. The reusable workflow caps them at `contents: read`.
+
+The publish job requires the caller's `workflow_run` workflow to grant at least:
+
+```yaml
+permissions:
+  contents: write
+  pull-requests: write
+```
+
+Plus the same on the calling `jobs.<id>.permissions:` block. If those are missing the run startup-fails with no logs.
+
+### Worked examples
+
+Live repos exercising each shape (each has an open PR with a working preview button):
+
+- [Single plugin with build step](https://github.com/adamziel/preview-in-playground-button-v3-example-simple) — `kind: plugin` shortcut.
+- [Monorepo, fixed activation set](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo) — `blueprint:` template with two `{{ARTIFACT_URL:...}}` placeholders.
+- [Monorepo, install only the changed plugin](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective) — `blueprint-from-artifact: true` driven by `git diff`.
+- [Composer + Vite plugin](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) — both `node-version` and `php-version` set, multi-toolchain build in one `build-command:`.
+
+### Migration from the v2 "Advanced: Testing Built CI Artifacts" pattern
+
+The pre-v3 pattern (still documented below for reference) requires the consuming repo to maintain ~107 lines of YAML across two workflow files: a build workflow that does its own `actions/checkout` + `setup-node` + `upload-artifact`, and a publish workflow with a hand-rolled `actions/github-script` block to parse PR metadata out of the artifact name plus a hand-rolled `node` heredoc to construct the blueprint JSON.
+
+To migrate:
+
+1. Replace your `pr-playground-preview-build.yml` with a `workflow_call` to `WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3`. Move whatever your build job did (`npm ci`, `composer install`, etc.) into the `build-command:` input. Replace the `actions/upload-artifact@v4` step with one or more `name=path` entries in the `artifacts:` input.
+2. Replace your `pr-playground-preview-publish.yml` with a `workflow_call` to `WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3`. Pick a blueprint mode (`kind:` for the trivial case, `blueprint:` for fixed shapes, `blueprint-from-artifact:` for per-PR shapes). Add the `permissions:` block on both the workflow and the calling job.
+3. **The shared release tag (`ci-artifacts` by default) is now created as a `--prerelease` instead of `--draft`.** Existing draft releases in your repo are not modified; they remain draft and Playground still cannot download from them. Either delete the existing draft release (a fresh prerelease will be auto-created on the next run) or manually convert the existing release from draft to prerelease. After that, no manual UI step is ever required.
+
+#### Caller-side surface comparison
+
+| | v2 advanced pattern | v3 reusable workflows |
+|---|---|---|
+| Lines of YAML in consuming repo | ~107 | ~14 |
+| Hand-rolled artifact-name regex | yes | no |
+| Hand-rolled blueprint construction | yes | no |
+| Manual "publish the draft release" step | yes (silent 404 footgun) | no |
+| Multi-zip / monorepo support | undocumented | first-class via `artifacts:` + `blueprint:` |
+| Per-PR variable blueprint | not supported | first-class via `blueprint-from-artifact:` |
+
+### Security model notes
+
+Identical to the v2 advanced pattern. The reusable workflows preserve the trigger split:
+
+- `preview-build.yml` runs on the caller's `pull_request` trigger. Untrusted PR code executes here. `permissions: contents: read` is declared in the reusable workflow file as a *ceiling* — callers cannot accidentally elevate it.
+- `preview-publish.yml` runs on the caller's `workflow_run` trigger. Never checks out PR code. Reads its own workflow YAML from the caller's default branch (GitHub's `workflow_run` security guarantee), so `blueprint:` template inputs cannot be modified by a PR. A runtime guard rejects any non-`workflow_run` invocation with a loud error.
+
+The artifact-hosting release uses `--prerelease` (not `--draft`) so download URLs are public on first run. Playground (and anyone else) can fetch the zips. Treat the preview button as "untrusted code in a sandbox" — Playground's iframe isolation is the mitigation, not this action.
+
+---
+
+## Pre-v3: Testing Built CI Artifacts (legacy)
+
+> **Deprecated in v3.** The reusable workflows above replace this section for new setups. The instructions below remain for reference and will continue to work — they just require ~10× more caller-side YAML and a manual UI step on first run.
 
 If your plugin or theme requires a build step, you can use the `expose-artifact-on-public-url` action to publish CI artifacts on a URL that WordPress Playground can fetch. Under the hood the action uploads ZIP files to one draft release (shared across all PRs) and keeps only the most recent artifacts you tell it to keep.
 
 > **:warning: Important Notice:**  
-> Before using the preview button with artifacts you **must make the draft release public (publish it or flag it as a pre-release)**. Otherwise WordPress Playground cannot download the ZIP and the button fails.
+> Before using the preview button with artifacts you **must make the draft release public (publish it or flag it as a pre-release)**. Otherwise WordPress Playground cannot download the ZIP and the button fails. (v3 sidesteps this by creating new releases as `--prerelease`.)
 
 ### Why two workflow files?
 
