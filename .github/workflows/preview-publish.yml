@@ -61,12 +61,12 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run'
     steps:
       - name: Guard against misuse
-        # Defense in depth: the job-level `if` already gates on workflow_run,
-        # but we also want a loud failure (not a silent skip) if a caller
-        # wires this up via pull_request_target or schedule.
+        # This workflow is privileged. It may only run after an unprivileged
+        # pull_request build completed. Do not convert this to a job-level
+        # `if`: misconfigured callers should see a loud failure, not a
+        # silently skipped publish job.
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -96,6 +96,7 @@ jobs:
           BLUEPRINT: ${{ inputs.blueprint }}
           KIND: ${{ inputs.kind }}
           FROM_ARTIFACT: ${{ inputs.blueprint-from-artifact }}
+          ARTIFACTS_TO_KEEP: ${{ inputs.artifacts-to-keep }}
         run: |
           set -euo pipefail
           set_count=0
@@ -110,11 +111,17 @@ jobs:
             echo "::error::kind must be 'plugin' or 'theme', got: $KIND" >&2
             exit 1
           fi
+          if [ "$ARTIFACTS_TO_KEEP" != "keep-all" ]; then
+            if ! [[ "$ARTIFACTS_TO_KEEP" =~ ^[0-9]+$ ]] || [ "$ARTIFACTS_TO_KEEP" -lt 1 ]; then
+              echo "::error::artifacts-to-keep must be a positive integer or 'keep-all', got: $ARTIFACTS_TO_KEEP" >&2
+              exit 1
+            fi
+          fi
 
       - name: Identify artifact bundle
         id: meta
         if: env.SKIP != '1'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
         with:
@@ -303,7 +310,7 @@ jobs:
 
       - name: Post Playground preview button
         if: env.SKIP != '1'
-        uses: WordPress/action-wp-playground-pr-preview@v2
+        uses: WordPress/action-wp-playground-pr-preview@c8607529dac8d2bf9a1e8493865fc97cd1c3c87b # v2
         with:
           mode: ${{ inputs.mode }}
           blueprint: ${{ steps.blueprint.outputs.blueprint }}

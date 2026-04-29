@@ -385,14 +385,35 @@ Two kinds of public URL work:
 
 The action handles (1) directly. The two reusable workflows handle (2) end-to-end: they run your build, upload the result to a `ci-artifacts` prerelease, and call the action with a Blueprint pointing at the resulting URL.
 
-### Two-workflow split (build path only)
+### Fork safety model (build path only)
 
-GitHub doesn't let one workflow simultaneously (a) run untrusted code from a fork PR and (b) write to releases or PR comments. The build path therefore splits:
+GitHub doesn't let one workflow simultaneously (a) run untrusted code from a
+fork PR and (b) write to releases or PR comments. The build path therefore
+splits the work at the artifact boundary:
 
-- **Build workflow** runs on `pull_request`, `permissions: contents: read`. Untrusted PR code executes here. The reusable workflow declares `contents: read` as a *ceiling*, so callers can't accidentally elevate it.
-- **Publish workflow** runs on `workflow_run`, `permissions: contents: write` + `pull-requests: write`. Never checks out PR code. GitHub reads its YAML from the *default branch* (security guarantee), so PRs can't tamper with what runs here.
+- **Build workflow** runs on `pull_request`, `permissions: contents: read`.
+  It checks out the PR head, runs your `build-command`, validates that the
+  expected zip(s) exist, logs `unzip -l` for inspection, and uploads a single
+  bundle artifact. It has no secrets and does not persist checkout credentials.
+- **Publish workflow** runs on `workflow_run`, `permissions: contents: write`
+  + `pull-requests: write`. It never checks out PR code. GitHub reads this
+  workflow from the default branch, so a fork PR cannot change the privileged
+  publish logic in the same PR.
+- **Artifact bundle** is the only handoff from untrusted to trusted code. The
+  publish workflow treats it as opaque bytes: it uploads the zip(s), substitutes
+  their URLs into a Blueprint, and lets Playground run them later inside its
+  browser sandbox.
 
-The publish workflow has a runtime guard that **fails loudly** if invoked from any trigger other than `workflow_run`. Misconfigured callers (e.g. someone reaches for `pull_request_target`) get a red ❌ instead of a silent compromise.
+The publish workflow has a runtime guard that **fails loudly** if invoked from
+any trigger other than `workflow_run`, or if the source run was not a successful
+`pull_request` run. Misconfigured callers (for example someone reaches for
+`pull_request_target`) get a red failure instead of a silent skip.
+
+Because the publish workflow is privileged, its third-party action references
+are pinned to commit SHAs. This avoids granting write permissions to a moved
+major-version tag. The internal button action is also called through an
+immutable v2 commit; v3 adds the reusable workflow layer around the same button
+action behavior.
 
 ### Trigger model and security
 
@@ -406,6 +427,11 @@ The publish workflow has a runtime guard that **fails loudly** if invoked from a
 | Clicking the button → Playground in the user's browser | The user's browser | Untrusted code, but iframe-isolated by Playground |
 
 Translation: the action does not require any trust in PR code. The zip is treated as opaque bytes everywhere except inside the Playground iframe, where the WebAssembly sandbox is the actual mitigation.
+
+For public repositories, release assets are public. A fork PR can therefore
+cause its built zip to be hosted on the repository's `ci-artifacts` prerelease
+until cleanup removes it. That is the tradeoff that makes one-click browser
+previews possible for fork contributors.
 
 `{{ARTIFACT_URL:<name>}}` substitution uses `JSON.stringify(url).slice(1, -1)`, so any character that could break JSON parsing is escaped. The `"{{...}}"` template convention is non-breaking and produces valid JSON for any URL.
 
@@ -471,7 +497,7 @@ Runs in the privileged `workflow_run` context, exposes the artifact bundle's zip
 | `blueprint` | one of three‡ | — | Blueprint JSON template. Use `{{ARTIFACT_URL:<name>}}` placeholders inside double quotes. |
 | `kind` | one of three‡ | — | `plugin` or `theme`. Shortcut: requires exactly one zip in the bundle, generates an `installPlugin`/`installTheme` step with `activate: true`. |
 | `blueprint-from-artifact` | one of three‡ | `false` | When `true`, read `blueprint.json` from the artifact bundle (requires `blueprint-from-build:` on the build side). |
-| `artifacts-to-keep` | no | `2` | Distinct PR commits worth of zips to keep on the release. Older zips for the same PR get pruned. Set to `keep-all` to disable cleanup. |
+| `artifacts-to-keep` | no | `2` | Positive integer number of distinct PR commits worth of zips to keep on the release. Older zips for the same PR get pruned. Set to `keep-all` to disable cleanup. |
 | `release-tag` | no | `ci-artifacts` | Tag used to host artifacts publicly. Auto-created as a prerelease on first use. |
 | `mode` | no | `append-to-description` | `append-to-description` or `comment`. |
 
@@ -515,6 +541,7 @@ All variables except `PLAYGROUND_BUTTON` are HTML-escaped before substitution.
 - **Two workflow files when there's a build step.** GitHub's permission model around fork PRs makes this unavoidable. The reusable workflows minimise but don't eliminate the boilerplate.
 - **Permissions ceiling is rigid.** Reusable workflows declare a max permission set; callers can match but not extend. Almost certainly a feature, but worth naming if you need the publish workflow to also push tags.
 - **Build and publish workflows must be pinned to compatible versions.** The artifact-naming format is the implicit interface between them. Use the same `@v3` (or branch ref) in both.
+- **Fork PR build output becomes public.** The publish workflow never trusts the zip, but it does upload it to a public release URL so Playground can fetch it. Keep `artifacts-to-keep` low unless you deliberately want longer retention.
 - **`{{ARTIFACT_URL:<name>}}` substitution is the only template feature.** No conditionals, no loops, no other placeholders. For per-PR variable shapes, write the blueprint at build time and use `blueprint-from-artifact: true`.
 - **One zip per `artifacts` entry.** Multi-file install bundles still need a hand-rolled flow.
 - **Plugin zips must extract to a slug-named folder.** When you `zip -r my-plugin.zip .` from inside the plugin dir, the zip contents are at the root, and Playground will install them with no slug folder. Wrap with a directory: `mkdir stage/my-plugin && rsync -a ./ stage/my-plugin/ && (cd stage && zip -r ../my-plugin.zip my-plugin)`.
@@ -522,6 +549,7 @@ All variables except `PLAYGROUND_BUTTON` are HTML-escaped before substitution.
 - **Hidden directories are skipped by `actions/upload-artifact@v4`.** If you stage your bundle in a `.foo/` directory it'll silently produce an empty artifact. Use a non-hidden name.
 - **`fetch-depth: 0` is required for diffs.** The default checkout is shallow (depth 1). Diffs against the PR base ref need full history, otherwise `git diff` fails with "no merge base."
 - **The `ci-artifacts` release is shared across all PRs.** Each PR's zips are unique (`pr-<N>-<SHA>-<name>.zip`); cleanup keeps the N most recent commit-sets per PR.
+- **`artifacts-to-keep` must be a positive integer or `keep-all`.** `0`, negative numbers, and arbitrary strings fail before any release assets are uploaded.
 - **`workflow_run`-triggered workflows always read their YAML from the default branch.** Workflow changes on a PR branch don't take effect until merged. Test publish-side changes on a scratch repo first.
 - **Private repos won't work.** Playground runs in the user's browser and needs unauthenticated download URLs. `git:directory` and release assets in private repos both require auth Playground doesn't have. Make the repo public or self-host the zip.
 
