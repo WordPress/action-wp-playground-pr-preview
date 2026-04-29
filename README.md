@@ -17,6 +17,8 @@ Add a **Preview in WordPress Playground** button to every pull request — so re
   <a href="#troubleshooting">troubleshooting</a>
 </p>
 
+> **Heads up — v3 is a meaningful change from v2.** The action's no-build inputs (`plugin-path:`, `theme-path:`, `blueprint:`, `blueprint-url:`) still work the same way, but v3 adds two reusable workflows that replace the old hand-rolled "Advanced: Testing Built CI Artifacts" pattern (~107 lines of caller-side YAML → ~14), and the shared `ci-artifacts` release is now created as a prerelease instead of a draft so download URLs are public on first run. See [Migrating from older usage](#migrating-from-older-usage) before upgrading. **Looking for the v2 docs?** They live at the [pre-v3 README on GitHub](https://github.com/WordPress/action-wp-playground-pr-preview/blob/c860752/README.md).
+
 This repo ships **one action and two reusable workflows**, all pinnable as `@v3`:
 
 - **`WordPress/action-wp-playground-pr-preview@v3`** — posts the preview button on a PR. Use it directly when your plugin or theme has no build step.
