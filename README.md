@@ -405,9 +405,10 @@ splits the work at the artifact boundary:
   browser sandbox.
 
 The publish workflow has a runtime guard that **fails loudly** if invoked from
-any trigger other than `workflow_run`, or if the source run was not a successful
-`pull_request` run. Misconfigured callers (for example someone reaches for
-`pull_request_target`) get a red failure instead of a silent skip.
+any trigger other than `workflow_run`. Non-PR source runs and failed build runs
+skip intentionally because there is no successful PR preview to publish.
+Misconfigured callers (for example someone reaches for `pull_request_target`)
+get a red failure instead of a silent skip.
 
 Because the publish workflow is privileged, its third-party action references
 are pinned to commit SHAs. This avoids granting write permissions to a moved
@@ -421,7 +422,7 @@ action behavior.
 |---|---|---|
 | `actions/checkout` of the PR head | Build workflow (`pull_request`) | Untrusted — no secrets, read-only |
 | Your `build-command:` (composer/npm/etc.) | Build workflow | Untrusted — runs in CI, output (the zip) is the only thing that escapes |
-| `actions/upload-artifact` of the bundle | Build workflow | Untrusted — bundle is opaque to the publish workflow |
+| `actions/upload-artifact` of the bundle | Build workflow | Untrusted — bundle is opaque to the publish workflow; publish verifies the artifact PR number and SHA against the `workflow_run` payload before using it |
 | Reading the bundle, exposing it on a release | Publish workflow (`workflow_run`) | Trusted — workflow YAML from default branch, never checks out PR code |
 | Posting the Preview button on the PR | Publish workflow → action | Trusted |
 | Clicking the button → Playground in the user's browser | The user's browser | Untrusted code, but iframe-isolated by Playground |

@@ -132,18 +132,31 @@ jobs:
               repo: context.repo.repo,
               run_id: runId,
             });
-            const a = list.data.artifacts.find(x =>
+            const artifacts = list.data.artifacts.filter(x =>
               /^wp-playground-preview-pr\d+-[0-9a-f]+$/i.test(x.name)
             );
-            if (!a) {
+            if (artifacts.length === 0) {
               throw new Error('No wp-playground-preview-pr* bundle found in source run.');
             }
+            if (artifacts.length !== 1) {
+              throw new Error(`Expected exactly one wp-playground-preview-pr* bundle, found ${artifacts.length}: ${artifacts.map(a => a.name).join(', ')}`);
+            }
+            const a = artifacts[0];
             const m = a.name.match(/^wp-playground-preview-pr(\d+)-(.+)$/);
             if (!m) throw new Error(`Cannot parse artifact name: ${a.name}`);
+            const [, prNumber, commitSha] = m;
+            const expectedSha = context.payload.workflow_run.head_sha;
+            if (commitSha !== expectedSha) {
+              throw new Error(`Artifact SHA ${commitSha} does not match source workflow_run.head_sha ${expectedSha}.`);
+            }
+            const pullRequests = context.payload.workflow_run.pull_requests || [];
+            if (!pullRequests.some(pr => String(pr.number) === prNumber)) {
+              throw new Error(`Artifact PR number ${prNumber} is not present in workflow_run.pull_requests.`);
+            }
             core.setOutput('artifact-id', String(a.id));
             core.setOutput('artifact-name', a.name);
-            core.setOutput('pr-number', m[1]);
-            core.setOutput('commit-sha', m[2]);
+            core.setOutput('pr-number', prNumber);
+            core.setOutput('commit-sha', commitSha);
 
       - name: Download artifact bundle
         if: env.SKIP != '1'
@@ -303,10 +316,17 @@ jobs:
               if (seen[sha] > keep) print name;
             }
           ' > to-delete.txt
+          delete_errors=0
           while IFS= read -r asset; do
             [ -z "$asset" ] && continue
-            gh release delete-asset "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes || true
+            if ! gh release delete-asset "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --yes; then
+              echo "::error::Failed to delete release asset: $asset" >&2
+              delete_errors=1
+            fi
           done < to-delete.txt
+          if [ "$delete_errors" -ne 0 ]; then
+            exit 1
+          fi
 
       - name: Post Playground preview button
         if: env.SKIP != '1'
