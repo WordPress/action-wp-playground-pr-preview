@@ -308,7 +308,7 @@ jobs:
           # Group assets by SHA so each PR keeps N most recent commit sets,
           # not N individual zips (a single commit may upload several zips).
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
-            --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.created_at)|\(.name)\"" \
+            --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.createdAt)|\(.name)\"" \
             > pr-assets.txt || true
           [ -s pr-assets.txt ] || exit 0
 

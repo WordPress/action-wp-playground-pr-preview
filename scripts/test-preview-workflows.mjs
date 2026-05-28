@@ -5,6 +5,10 @@ const publishWorkflow = readFileSync(
   new URL('../.github/workflows/preview-publish.yml', import.meta.url),
   'utf8'
 );
+const exposeArtifactAction = readFileSync(
+  new URL('../.github/actions/expose-artifact-on-public-url/action.yml', import.meta.url),
+  'utf8'
+);
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 
 test('wrong-trigger misuse fails in the guard step, not at job level', () => {
@@ -64,6 +68,14 @@ test('publish workflow validates release retention before uploading assets', () 
   );
   assert.match(publishWorkflow, /\[\[ "\$ARTIFACTS_TO_KEEP" =~ \^\[0-9\]\+\$ \]\]/);
   assert.match(publishWorkflow, /\[ "\$ARTIFACTS_TO_KEEP" -lt 1 \]/);
+});
+
+
+test('cleanup sorts release assets by the GitHub CLI createdAt field', () => {
+  assert.doesNotMatch(publishWorkflow, /created_at/);
+  assert.match(publishWorkflow, /createdAt/);
+  assert.doesNotMatch(exposeArtifactAction, /created_at/);
+  assert.match(exposeArtifactAction, /createdAt/);
 });
 
 function test(name, fn) {
