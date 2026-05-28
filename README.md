@@ -17,7 +17,7 @@ Add a **Preview in WordPress Playground** button to every pull request — so re
   <a href="#troubleshooting">troubleshooting</a>
 </p>
 
-> **Heads up — v3 is a meaningful change from v2.** The action's no-build inputs (`plugin-path:`, `theme-path:`, `blueprint:`, `blueprint-url:`) still work the same way, but v3 adds two reusable workflows that replace the old hand-rolled "Advanced: Testing Built CI Artifacts" pattern (~107 lines of caller-side YAML → ~14), and the shared `ci-artifacts` release is now created as a prerelease instead of a draft so download URLs are public on first run. See [Migrating from older usage](#migrating-from-older-usage) before upgrading. **Looking for the v2 docs?** They live at the [pre-v3 README on GitHub](https://github.com/WordPress/action-wp-playground-pr-preview/blob/c860752/README.md).
+> **Heads up — v3 is a meaningful change from v2.** The action's no-build inputs (`plugin-path:`, `theme-path:`, `blueprint:`, `blueprint-url:`) still work the same way, but v3 adds two reusable workflows that replace the common old hand-rolled "Advanced: Testing Built CI Artifacts" pattern (~107 lines of caller-side YAML → ~14), and the shared `ci-artifacts` release is now created as a prerelease instead of a draft so download URLs are public on first run. The legacy artifact helper still exists for unusual cross-repository or custom-retention setups. See [Migrating from older usage](#migrating-from-older-usage) before upgrading. **Looking for the v2 docs?** They live at the [pre-v3 README on GitHub](https://github.com/WordPress/action-wp-playground-pr-preview/blob/c860752/README.md).
 
 This repo ships **one action and two reusable workflows**, all pinnable as `@v3`:
 
@@ -76,6 +76,8 @@ Open a PR. The action edits the description with a Preview button. Click it; Pla
 
 That's it. No artifact hosting, no second workflow.
 
+> **Fork PR note:** this direct one-workflow setup is simplest for same-repository PRs. Public fork PRs usually receive a read-only `GITHUB_TOKEN`, so the action may be unable to edit the PR description. If fork contributors need working previews, use the two-workflow build/publish setup below even when the build command is just a small zip step.
+
 ### With a build step
 
 Your plugin or theme needs `composer install`, `npm run build`, or similar before it works. Two workflow files:
@@ -130,12 +132,12 @@ Open a PR. The build workflow runs `npm ci && npm run build:plugin-zip`, the pub
 
 Each link is a real, public repo running these workflows. Each PR has a working Preview button that boots Playground with the PR's contents.
 
-| Shape | Repo | PR with button |
-|---|---|---|
-| Single plugin, build step (`kind: plugin`) | [example-simple](https://github.com/adamziel/preview-in-playground-button-v3-example-simple) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/2) |
-| Monorepo, fixed activation set (`blueprint:` template) | [example-monorepo](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/2) |
-| Monorepo, install only changed plugin (`blueprint-from-artifact`) | [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/2) |
-| Composer + Vite plugin (multi-toolchain build) | [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) | [#1](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/1) |
+| Shape | Repo | Same-repo PR | Fork PR |
+|---|---|---|---|
+| Single plugin, build step (`kind: plugin`) | [example-simple](https://github.com/adamziel/preview-in-playground-button-v3-example-simple) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/2) | _to be filled before v3 release_ |
+| Monorepo, fixed activation set (`blueprint:` template) | [example-monorepo](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/2) | _to be filled before v3 release_ |
+| Monorepo, install only changed plugin (`blueprint-from-artifact`) | [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/2) | _to be filled before v3 release_ |
+| Composer + Vite plugin (multi-toolchain build) | [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) | [#1](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/1) | _to be filled before v3 release_ |
 
 If you're scaffolding via an LLM, point it at one of these repos and the README's [Recipes](#recipes) section.
 
@@ -321,6 +323,72 @@ build-command: |
 
 Publish workflow stays at `kind: plugin`. Live: [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite).
 
+
+### Real-world: Plugin Check-style fork-safe preview
+
+[WordPress/plugin-check#1330](https://github.com/WordPress/plugin-check/pull/1330) uses the same fork-safe shape: build a production plugin zip in `pull_request`, then let `workflow_run` publish the zip and post a button that opens directly to Tools → Plugin Check. In v3, the custom publish workflow can collapse to the reusable workflows:
+
+```yaml
+# .github/workflows/pr-playground-preview-build.yml
+name: PR Playground Preview Build
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  build:
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
+    with:
+      php-version: '8.1'
+      artifacts: plugin-check=build/plugin-check.zip
+      build-command: |
+        set -euo pipefail
+        composer install --no-dev --optimize-autoloader --no-interaction --no-progress
+        mkdir -p build/plugin-check
+        rsync -a --delete \
+          --exclude-from='.distignore' \
+          --exclude='.git' \
+          --exclude='.github' \
+          --exclude='build' \
+          ./ build/plugin-check/
+        ( cd build && zip -qr plugin-check.zip plugin-check )
+```
+
+```yaml
+# .github/workflows/pr-playground-preview-publish.yml
+name: PR Playground Preview Publish
+on:
+  workflow_run:
+    workflows: ["PR Playground Preview Build"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    with:
+      blueprint: |
+        {
+          "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+          "landingPage": "/wp-admin/tools.php?page=plugin-check",
+          "phpExtensionBundles": ["kitchen-sink"],
+          "steps": [
+            { "step": "login", "username": "admin", "password": "password" },
+            { "step": "installPlugin",
+              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:plugin-check}}" },
+              "options": { "activate": true } }
+          ]
+        }
+```
+
+The important parts are the artifact name (`plugin-check`) and the matching `{{ARTIFACT_URL:plugin-check}}` placeholder. The reusable publish workflow derives the PR number and head SHA from the workflow-run artifact name, so Plugin Check does not need to upload a separate metadata artifact.
+
 ### Post the button as a comment instead of editing the description
 
 ```yaml
@@ -392,7 +460,7 @@ fork PR and (b) write to releases or PR comments. The build path therefore
 splits the work at the artifact boundary:
 
 - **Build workflow** runs on `pull_request`, `permissions: contents: read`.
-  It checks out the PR head, runs your `build-command`, validates that the
+  It checks out the `pull_request` ref, runs your `build-command`, validates that the
   expected zip(s) exist, logs `unzip -l` for inspection, and uploads a single
   bundle artifact. It has no secrets and does not persist checkout credentials.
 - **Publish workflow** runs on `workflow_run`, `permissions: contents: write`
@@ -420,9 +488,9 @@ action behavior.
 
 | Step | Where it runs | Trust |
 |---|---|---|
-| `actions/checkout` of the PR head | Build workflow (`pull_request`) | Untrusted — no secrets, read-only |
+| `actions/checkout` of the `pull_request` ref | Build workflow (`pull_request`) | Untrusted — no secrets, read-only |
 | Your `build-command:` (composer/npm/etc.) | Build workflow | Untrusted — runs in CI, output (the zip) is the only thing that escapes |
-| `actions/upload-artifact` of the bundle | Build workflow | Untrusted — bundle is opaque to the publish workflow; publish verifies the artifact PR number and SHA against the `workflow_run` payload before using it |
+| `actions/upload-artifact` of the bundle | Build workflow | Untrusted — bundle is opaque to the publish workflow; publish verifies the artifact PR number and SHA against the `workflow_run` payload and base-repo PR API before using it |
 | Reading the bundle, exposing it on a release | Publish workflow (`workflow_run`) | Trusted — workflow YAML from default branch, never checks out PR code |
 | Posting the Preview button on the PR | Publish workflow → action | Trusted |
 | Clicking the button → Playground in the user's browser | The user's browser | Untrusted code, but iframe-isolated by Playground |
@@ -458,9 +526,9 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | `comment-template` | no | (full default) | Template for the PR comment. Supports the [template variables](#template-variables). |
 | `restore-button-if-removed` | no | `true` | If the PR author removes the button block, restore it on the next run. Set `false` to respect deletions. Only applies to `append-to-description` mode. |
 | `pr-number` | no | *event payload* | Pull request number. Required when calling from a workflow that doesn't have a `pull_request` event payload (e.g. `workflow_run`). |
-| `github-token` | no | `secrets.GITHUB_TOKEN` | Token with `pull-requests: write` and `contents: read`. |
+| `github-token` | yes | — | Token with `pull-requests: write` and `contents: read`, usually `${{ secrets.GITHUB_TOKEN }}`. |
 
-† Provide exactly one of `plugin-path`, `theme-path`, `blueprint`, `blueprint-url` — or pair `plugin-path` and `theme-path` together.
+† Provide `blueprint-url`, `blueprint`, or one/both of `plugin-path` and `theme-path`. Do not combine `blueprint-url` or `blueprint` with path inputs unless you intentionally want the custom Blueprint/URL to win.
 
 #### Outputs
 
@@ -618,7 +686,7 @@ That's `restore-button-if-removed: true` (the default). Either set it to `false`
 
 ## Migrating from older usage
 
-The pre-v3 advanced pattern asked you to maintain ~107 lines of YAML across two workflow files (hand-rolled `actions/github-script` for parsing artifact metadata, hand-rolled `node` heredoc for building the Blueprint, plus a manual one-time UI step to publish a draft release). All of that is now internal to the reusable workflows.
+The common pre-v3 advanced pattern asked you to maintain ~107 lines of YAML across two workflow files (hand-rolled `actions/github-script` for parsing artifact metadata, hand-rolled `node` heredoc for building the Blueprint, plus a manual one-time UI step to publish a draft release). All of that is now internal to the reusable workflows. If you used less-common `expose-artifact-on-public-url` inputs such as `artifact-source-repository`, `release-repository`, `create-release-if-missing`, or `cleanup-enabled`, keep using the legacy helper or wrap the reusable workflow until v3 grows those knobs.
 
 To migrate:
 

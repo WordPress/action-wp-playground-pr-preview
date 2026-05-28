@@ -206,7 +206,7 @@ const githubLib = require('@actions/github');
 
   	// Escape HTML entities somewhat naively to prevent the values leaking
   	// into HTML syntax elements.
-  	if(key !== 'PLAYGROUND_BUTTON') {
+  	if(upperKey !== 'PLAYGROUND_BUTTON') {
   	  value = value
   		.replace(/&/g, '&amp;')
   		.replace(/</g, '&lt;')

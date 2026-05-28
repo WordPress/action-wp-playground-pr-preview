@@ -1,6 +1,6 @@
 name: WordPress Playground Preview - Build (reusable)
 
-# Reusable workflow that builds one or more plugin/theme zips from PR head
+# Reusable workflow that builds one or more plugin/theme zips from pull_request code
 # and uploads them as a single bundled artifact, plus an optional blueprint
 # JSON written by the build itself. Pair with `preview-publish.yml`.
 #

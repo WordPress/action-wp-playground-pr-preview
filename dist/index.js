@@ -32042,7 +32042,7 @@ const githubLib = __nccwpck_require__(3228);
 
   	// Escape HTML entities somewhat naively to prevent the values leaking
   	// into HTML syntax elements.
-  	if(key !== 'PLAYGROUND_BUTTON') {
+  	if(upperKey !== 'PLAYGROUND_BUTTON') {
   	  value = value
   		.replace(/&/g, '&amp;')
   		.replace(/</g, '&lt;')

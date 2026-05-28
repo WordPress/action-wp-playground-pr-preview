@@ -30,14 +30,9 @@ test('publish workflow validates the untrusted artifact name against workflow_ru
   assert.match(publishWorkflow, /artifacts\.length !== 1/);
   assert.match(publishWorkflow, /context\.payload\.workflow_run\.head_sha/);
   assert.match(publishWorkflow, /commitSha !== expectedSha/);
-  assert.match(
-    publishWorkflow,
-    /context\.payload\.workflow_run\.pull_requests \|\| \[\]/
-  );
-  assert.match(
-    publishWorkflow,
-    /pullRequests\.some\(pr => String\(pr\.number\) === prNumber\)/
-  );
+  assert.match(publishWorkflow, /github\.rest\.pulls\.get/);
+  assert.match(publishWorkflow, /pull_number: Number\(prNumber\)/);
+  assert.match(publishWorkflow, /prResponse\.data\.head\.sha !== expectedSha/);
 });
 
 test('release cleanup failures fail the workflow instead of being swallowed', () => {

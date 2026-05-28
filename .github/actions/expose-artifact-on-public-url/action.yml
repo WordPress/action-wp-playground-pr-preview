@@ -35,7 +35,7 @@ inputs:
     default: '2'
 
   release-tag:
-    description: GitHub release tag to use (must already exist)
+    description: GitHub release tag to use for public artifact hosting
     required: false
     default: ci-artifacts
 

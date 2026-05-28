@@ -149,9 +149,17 @@ jobs:
             if (commitSha !== expectedSha) {
               throw new Error(`Artifact SHA ${commitSha} does not match source workflow_run.head_sha ${expectedSha}.`);
             }
-            const pullRequests = context.payload.workflow_run.pull_requests || [];
-            if (!pullRequests.some(pr => String(pr.number) === prNumber)) {
-              throw new Error(`Artifact PR number ${prNumber} is not present in workflow_run.pull_requests.`);
+            // `workflow_run.pull_requests` can be empty for fork PRs. The artifact
+            // name carries the PR number, so verify it by reading that PR from
+            // the base repository and matching its current head SHA to the
+            // workflow_run head SHA before using any artifact bytes.
+            const prResponse = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: Number(prNumber),
+            });
+            if (prResponse.data.head.sha !== expectedSha) {
+              throw new Error(`Artifact PR number ${prNumber} points to head SHA ${prResponse.data.head.sha}, not workflow_run.head_sha ${expectedSha}.`);
             }
             core.setOutput('artifact-id', String(a.id));
             core.setOutput('artifact-name', a.name);
