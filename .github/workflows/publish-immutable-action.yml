@@ -13,8 +13,20 @@ jobs:
       packages: write
 
     steps:
+      - name: Check release tag
+        id: tag
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping immutable action publish because '$GITHUB_REF_NAME' is not a full semantic version tag."
+          fi
       - name: Checking out
+        if: steps.tag.outputs.publish == 'true'
         uses: actions/checkout@v4
       - name: Publish
+        if: steps.tag.outputs.publish == 'true'
         id: publish
         uses: actions/publish-immutable-action@v0.0.4
