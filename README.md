@@ -17,15 +17,9 @@ Add a **Preview in WordPress Playground** button to every pull request — so re
   <a href="#troubleshooting">troubleshooting</a>
 </p>
 
-> **Heads up — v3 is a meaningful change from v2.** The action's no-build inputs (`plugin-path:`, `theme-path:`, `blueprint:`, `blueprint-url:`) still work the same way, but v3 adds two reusable workflows that replace the common old hand-rolled "Advanced: Testing Built CI Artifacts" pattern (~107 lines of caller-side YAML → ~14), and the shared `ci-artifacts` release is now created as a prerelease instead of a draft so download URLs are public on first run. The legacy artifact helper still exists for unusual cross-repository or custom-retention setups. See [Migrating from older usage](#migrating-from-older-usage) before upgrading. **Looking for the v2 docs?** They live at the [pre-v3 README on GitHub](https://github.com/WordPress/action-wp-playground-pr-preview/blob/c860752/README.md).
+> **Heads up:** v3 keeps the direct no-build action inputs, and adds fork-safe reusable workflows for built previews. See [Migrating from older usage](#migrating-from-older-usage) for what changed; the old v2 docs are in the [pre-v3 README](https://github.com/WordPress/action-wp-playground-pr-preview/blob/c860752/README.md).
 
-This repo ships **one action and two reusable workflows**, all pinnable as `@v3`:
-
-- **`WordPress/action-wp-playground-pr-preview@v3`** — posts the preview button on a PR. Use it directly when your plugin or theme has no build step.
-- **`.../preview-build.yml@v3`** — reusable workflow that runs your build (Composer, npm, Vite, anything) and uploads the resulting zip(s).
-- **`.../preview-publish.yml@v3`** — reusable workflow that exposes those zips on a public URL and calls the action to post the button.
-
-Everything you need is in the **[Quick start](#quick-start)** section. Pick the variant that matches whether your code needs a build step.
+Start with **[Quick start](#quick-start)** and pick the variant that matches your repo: no build step, or a build step that needs Composer/npm/Vite output before Playground can run it.
 
 ---
 
