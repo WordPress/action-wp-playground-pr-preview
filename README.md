@@ -134,10 +134,10 @@ Each link is a real, public repo running these workflows. Each PR has a working 
 
 | Shape | Repo | Same-repo PR | Fork PR |
 |---|---|---|---|
-| Single plugin, build step (`kind: plugin`) | [example-simple](https://github.com/adamziel/preview-in-playground-button-v3-example-simple) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/2) | _to be filled before v3 release_ |
-| Monorepo, fixed activation set (`blueprint:` template) | [example-monorepo](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/2) | _to be filled before v3 release_ |
-| Monorepo, install only changed plugin (`blueprint-from-artifact`) | [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/2) | _to be filled before v3 release_ |
-| Composer + Vite plugin (multi-toolchain build) | [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) | [#1](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/1) | _to be filled before v3 release_ |
+| Single plugin, build step (`kind: plugin`) | [example-simple](https://github.com/adamziel/preview-in-playground-button-v3-example-simple) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/2) | [#3](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/3) |
+| Monorepo, fixed activation set (`blueprint:` template) | [example-monorepo](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/2) | [#3](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/3) |
+| Monorepo, install only changed plugin (`blueprint-from-artifact`) | [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/2) | [#3](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/3) |
+| Composer + Vite plugin (multi-toolchain build) | [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) | [#1](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/1) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/2) |
 
 If you're scaffolding via an LLM, point it at one of these repos and the README's [Recipes](#recipes) section.
 
