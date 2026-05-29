@@ -35,7 +35,7 @@ inputs:
     default: '2'
 
   release-tag:
-    description: GitHub release tag to use (must already exist)
+    description: GitHub release tag to use for public artifact hosting
     required: false
     default: ci-artifacts
 
@@ -172,11 +172,14 @@ runs:
           exit 0
         fi
 
-        echo "Creating draft release $RELEASE_TAG in $release_repo"
+        # Create as --prerelease (not --draft) so download URLs are public
+        # immediately. Draft releases require auth, which Playground does not
+        # have, leading to silent 404s when the preview button is clicked.
+        echo "Creating prerelease $RELEASE_TAG in $release_repo"
         gh release create "$RELEASE_TAG" \
           --repo "$release_repo" \
-          --draft \
-          --notes "Automated release for WordPress Playground CI artifacts"
+          --prerelease \
+          --notes "Automated prerelease for WordPress Playground CI artifacts"
 
     - name: Upload artifact to release
       id: expose-build-artifact-on-public-url
@@ -224,7 +227,7 @@ runs:
         fi
 
         gh release view "$RELEASE_TAG" --repo "$release_repo" --json assets \
-          --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.created_at)|\(.name)\"" \
+          --jq ".assets[] | select(.name | startswith(\"pr-$PR_NUMBER-\")) | \"\(.createdAt)|\(.name)\"" \
           > pr-artifacts.txt
 
         if [ ! -s pr-artifacts.txt ]; then

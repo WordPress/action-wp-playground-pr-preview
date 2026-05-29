@@ -1,0 +1,154 @@
+name: WordPress Playground Preview - Build (reusable)
+
+# Reusable workflow that builds one or more plugin/theme zips from pull_request code
+# and uploads them as a single bundled artifact, plus an optional blueprint
+# JSON written by the build itself. Pair with `preview-publish.yml`.
+#
+# Runs with read-only permissions so it is safe for fork PRs.
+
+on:
+  workflow_call:
+    inputs:
+      artifacts:
+        description: |
+          Newline-separated list of `name=path` entries describing the zips
+          the build produces. `name` becomes the slug used by the publish
+          workflow's blueprint template ({{ARTIFACT_URL:<name>}}). `path` is
+          relative to `working-directory`.
+
+          Example:
+            artifacts: |
+              core=build/core.zip
+              forms=build/forms.zip
+        required: true
+        type: string
+      build-command:
+        description: 'Shell command that produces every path listed in `artifacts`.'
+        required: true
+        type: string
+      working-directory:
+        description: 'Working directory for the build command.'
+        required: false
+        type: string
+        default: '.'
+      node-version:
+        description: 'If set, run actions/setup-node before the build.'
+        required: false
+        type: string
+        default: ''
+      php-version:
+        description: 'If set, run shivammathur/setup-php before the build.'
+        required: false
+        type: string
+        default: ''
+      fetch-depth:
+        description: |
+          actions/checkout `fetch-depth` value. Defaults to 1 (shallow).
+          Set to 0 when the build needs to diff against the base ref
+          (e.g. selective monorepo previews).
+        required: false
+        type: number
+        default: 1
+      blueprint-from-build:
+        description: |
+          Optional path to a `blueprint.json` written by the build command.
+          When set, the file is bundled with the artifact and the publish
+          workflow can pick it up via `blueprint-from-artifact: true`. Use
+          this when the blueprint must vary per PR (e.g. only-changed-plugin
+          monorepos). Path is relative to `working-directory`.
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Untrusted code: never persist credentials.
+          persist-credentials: false
+          fetch-depth: ${{ inputs.fetch-depth }}
+
+      - if: ${{ inputs.node-version != '' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - if: ${{ inputs.php-version != '' }}
+        uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
+        with:
+          php-version: ${{ inputs.php-version }}
+
+      - name: Run build command
+        working-directory: ${{ inputs.working-directory }}
+        shell: bash
+        run: ${{ inputs.build-command }}
+
+      - name: Stage artifact bundle
+        shell: bash
+        env:
+          WORKING_DIRECTORY: ${{ inputs.working-directory }}
+          ARTIFACTS_INPUT: ${{ inputs.artifacts }}
+          BLUEPRINT_FROM_BUILD: ${{ inputs.blueprint-from-build }}
+        run: |
+          set -euo pipefail
+          bundle="$GITHUB_WORKSPACE/wp-playground-preview-bundle"
+          rm -rf "$bundle"
+          mkdir -p "$bundle/zips"
+
+          # Parse `name=path` lines, skipping blanks and comments.
+          while IFS= read -r line; do
+            line="${line#"${line%%[![:space:]]*}"}"
+            line="${line%"${line##*[![:space:]]}"}"
+            [ -z "$line" ] && continue
+            case "$line" in \#*) continue ;; esac
+            if [[ "$line" != *=* ]]; then
+              echo "Invalid artifacts entry (expected name=path): $line" >&2
+              exit 1
+            fi
+            name="${line%%=*}"
+            path="${line#*=}"
+            # Slug rules keep the artifact name regex-friendly for publish.
+            if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+              echo "Invalid artifact name '$name' (allowed: A-Za-z0-9_-)" >&2
+              exit 1
+            fi
+            src="${WORKING_DIRECTORY%/}/${path#./}"
+            if [ ! -f "$src" ]; then
+              echo "Build did not produce expected zip: $src" >&2
+              exit 1
+            fi
+            cp "$src" "$bundle/zips/$name.zip"
+            echo "Staged: $name.zip ($(wc -c <"$bundle/zips/$name.zip") bytes)"
+            unzip -l "$bundle/zips/$name.zip"
+          done <<< "$ARTIFACTS_INPUT"
+
+          if [ -z "$(ls -A "$bundle/zips")" ]; then
+            echo "No artifacts staged. Did you provide a non-empty `artifacts` input?" >&2
+            exit 1
+          fi
+
+          if [ -n "$BLUEPRINT_FROM_BUILD" ]; then
+            bp="${WORKING_DIRECTORY%/}/${BLUEPRINT_FROM_BUILD#./}"
+            if [ ! -f "$bp" ]; then
+              echo "blueprint-from-build is set but file not found: $bp" >&2
+              exit 1
+            fi
+            # Validate it's parseable JSON before shipping it downstream.
+            node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$bp"
+            cp "$bp" "$bundle/blueprint.json"
+            echo "Staged: blueprint.json"
+          fi
+
+      - name: Upload artifact bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          # Single bundle keeps upload-artifact's static step count happy and
+          # the publish workflow only needs to find one artifact, not N.
+          name: wp-playground-preview-pr${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: wp-playground-preview-bundle/
+          if-no-files-found: error
