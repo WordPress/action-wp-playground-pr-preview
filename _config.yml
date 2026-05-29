@@ -1,0 +1,8 @@
+title: WordPress Playground PR Preview
+description: Add WordPress Playground preview buttons to GitHub pull requests for plugins and themes.
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+exclude:
+  - README.source.md
