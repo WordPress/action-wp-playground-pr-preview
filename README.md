@@ -26,10 +26,12 @@ Start with **[Quick start](#quick-start)** and choose the path that matches your
 ## Table of contents
 
 - [Quick start](#quick-start)
+  - [Which setup should I use?](#which-setup-should-i-use)
   - [No build step](#no-build-step)
   - [With a build step](#with-a-build-step)
 - [See it live](#see-it-live)
 - [Recipes](#recipes)
+- [Using an LLM to add this to your repository](#using-an-llm-to-add-this-to-your-repository)
 - [How it works](#how-it-works)
 - [Reference](#reference)
 - [Limitations & gotchas](#limitations--gotchas)
@@ -41,6 +43,18 @@ Start with **[Quick start](#quick-start)** and choose the path that matches your
 ---
 
 ## Quick start
+
+### Which setup should I use?
+
+| Your repository | Use this setup |
+|---|---|
+| A plugin or theme works directly from the repository checkout | [No build step](#no-build-step) |
+| A plugin or theme needs Composer, npm, Vite, or another build command first | [With a build step](#with-a-build-step) |
+| You accept public fork PRs and need previews to work for those contributors | [With a build step](#with-a-build-step) |
+| A preview should install multiple built plugins or themes | Start with [With a build step](#with-a-build-step), then use the [monorepo recipe](#monorepo-with-multiple-plugins-all-activated-together) |
+| The repository is private | The default setup is not enough; Playground needs public, unauthenticated URLs. See [Limitations & gotchas](#limitations--gotchas). |
+
+If you are not sure, start with **No build step** only when the files committed to the pull request are exactly the files WordPress should run. If CI must generate anything first, use **With a build step**.
 
 ### No build step
 
@@ -66,9 +80,17 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+You do not need to create `secrets.GITHUB_TOKEN`; GitHub provides it automatically. The `permissions` block gives that token the access this action needs.
+
 Open a pull request. The action adds a Preview button to the pull request description. When someone clicks it, Playground fetches the plugin or theme from GitHub and boots WordPress with it activated.
 
 This direct setup does not run a build command or publish a ZIP artifact; Playground loads the files from GitHub at the pull request ref.
+
+Expected result:
+
+- The PR workflow finishes successfully.
+- The PR description contains a managed Preview button block.
+- Clicking the button opens Playground with your plugin or theme installed and activated.
 
 > **Fork PR note:** this direct one-workflow setup is simplest for same-repository PRs. Public fork PRs usually receive a read-only `GITHUB_TOKEN`, so the action may be unable to edit the PR description. If fork contributors need working previews, use the two-workflow build/publish setup below even when the build command is just a small zip step.
 
@@ -94,6 +116,8 @@ jobs:
         npm run build:plugin-zip
 ```
 
+In `artifacts: my-plugin=build/my-plugin.zip`, `my-plugin` is the artifact name and `build/my-plugin.zip` is the ZIP file your `build-command` must create. The ZIP should extract to a plugin slug folder, for example `my-plugin/my-plugin.php`, not just files at the ZIP root. See [Plugin zips must extract to a slug-named folder](#limitations--gotchas) if your preview opens but the plugin is missing.
+
 ```yaml
 # .github/workflows/pr-preview-publish.yml
 name: PR Preview - Publish
@@ -116,7 +140,17 @@ jobs:
       kind: plugin            # or: kind: theme
 ```
 
+`kind: plugin` tells the publish workflow to generate the simplest Blueprint for one plugin ZIP: install it and activate it. Use `kind: theme` for one theme ZIP. For multiple ZIPs or extra setup steps, use a custom `blueprint:` recipe below.
+
+You do not need to create `secrets.GITHUB_TOKEN`; GitHub provides it automatically to each workflow run.
+
 Open a pull request. The build workflow runs `npm ci && npm run build:plugin-zip`. After that succeeds, the publish workflow uploads the resulting ZIP to a public release URL and posts the Preview button. When someone clicks it, Playground installs and activates the built plugin.
+
+Expected result:
+
+- The build workflow uploads a `wp-playground-preview-pr<N>-<SHA>` artifact.
+- The publish workflow creates or updates a `ci-artifacts` prerelease and uploads the built ZIP there.
+- The PR description contains a Preview button that opens Playground with the built plugin or theme installed.
 
 > **Why two workflow files?** The build workflow runs untrusted pull request code with read-only permissions. The publish workflow runs later, from the trusted default-branch workflow, with the write permissions needed to upload release assets and update the pull request. See [How it works](#how-it-works).
 
@@ -139,7 +173,7 @@ Each link is a real, public repo running these workflows. Each PR has a working 
 
 Pick the recipe that matches your repository, then adjust the paths, commands, and artifact names for your project.
 
-Unless a recipe shows a full workflow file, the YAML snippet is a step that goes under `jobs.preview.steps` in the [no-build workflow](#no-build-step).
+Unless a recipe shows a full workflow file, the YAML snippet is a replacement step under `jobs.preview.steps` in the [no-build workflow](#no-build-step).
 
 ### Plugin in a subdirectory
 
@@ -154,6 +188,8 @@ In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.
 
 ### Theme
 
+In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.preview.steps` with:
+
 ```yaml
 - uses: WordPress/action-wp-playground-pr-preview@v3
   with:
@@ -162,6 +198,8 @@ In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.
 ```
 
 ### Plugin **and** theme together
+
+Use this when a PR should preview a plugin and a theme from the same repository. In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.preview.steps` with:
 
 ```yaml
 - uses: WordPress/action-wp-playground-pr-preview@v3
@@ -211,9 +249,17 @@ Or host the blueprint elsewhere and pass the URL:
 
 Learn more about Blueprints: <https://wordpress.github.io/wordpress-playground/blueprints/>.
 
+Choose the Blueprint input based on where the JSON comes from:
+
+- Use `blueprint` when the workflow can include the full JSON string.
+- Use `blueprint-url` when the JSON is already hosted at a public URL.
+- Use `blueprint-from-artifact` when the build workflow generates `blueprint.json` dynamically.
+
 ### Single plugin with a build step
 
-See the [Quick start with a build step](#with-a-build-step) above. The reusable workflow handles checkout, optional Node/PHP setup, build, zip, upload, public URL, blueprint, and button posting.
+See the [Quick start with a build step](#with-a-build-step) above. The reusable workflow handles checkout, optional Node/PHP setup, build, ZIP upload, public URL, Blueprint generation, and button posting.
+
+The most common mistake is producing a ZIP with the wrong shape. WordPress plugin ZIPs should extract to a slug-named folder, such as `my-plugin/my-plugin.php`. If your build command runs `zip -r my-plugin.zip .` from inside the plugin directory, stage the files into a folder first, then zip that folder.
 
 ### Monorepo with multiple plugins, all activated together
 
@@ -468,6 +514,33 @@ Or for comment mode:
 ```
 
 Available template variables are listed under [Reference → Template variables](#template-variables).
+
+---
+
+## Using an LLM to add this to your repository
+
+If you ask an LLM or coding agent to set this up, give it enough context to choose the right path instead of blindly pasting the first YAML snippet.
+
+Suggested prompt:
+
+```text
+Add WordPress/action-wp-playground-pr-preview@v3 to this repository.
+First inspect whether the WordPress plugin or theme can run directly from the repository checkout, or whether CI must build files first.
+If no build step is needed, add one pull_request workflow using plugin-path or theme-path.
+If a build step is needed, add the two-workflow preview-build.yml / preview-publish.yml setup.
+Use the smallest working configuration. Preserve existing CI. Do not use pull_request_target.
+After editing, verify that any artifacts path listed in artifacts: is actually created by build-command.
+```
+
+Checklist for reviewing the LLM's output:
+
+- `secrets.GITHUB_TOKEN` is referenced but not created manually.
+- Direct action usage appears under `jobs.<job_id>.steps[].uses`.
+- Reusable workflow usage appears under `jobs.<job_id>.uses`.
+- Build and publish workflows use the same version, for example `@v3`.
+- Every `artifacts` entry has the form `name=path/to/file.zip`, and the build command creates that exact ZIP path.
+- Plugin ZIPs extract to a slug-named folder, not directly to files at the ZIP root.
+- The workflow does not use `pull_request_target`.
 
 ---
 
