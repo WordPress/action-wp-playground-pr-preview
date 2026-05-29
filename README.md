@@ -131,7 +131,7 @@ Each link is a real, public repo running these workflows. Each PR has a working 
 | Single plugin, build step (`kind: plugin`) | [example-simple](https://github.com/adamziel/preview-in-playground-button-v3-example-simple) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/2) | [#3](https://github.com/adamziel/preview-in-playground-button-v3-example-simple/pull/3) |
 | Monorepo, fixed activation set (`blueprint:` template) | [example-monorepo](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/2) | [#3](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo/pull/3) |
 | Monorepo, install only changed plugin (`blueprint-from-artifact`) | [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/2) | [#3](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective/pull/3) |
-| Composer + Vite plugin (multi-toolchain build) | [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) | [#1](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/1) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/2) |
+| Plugin with PHP dependencies and built JavaScript/CSS | [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite) | [#1](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/1) | [#2](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite/pull/2) |
 
 ---
 
@@ -139,7 +139,11 @@ Each link is a real, public repo running these workflows. Each PR has a working 
 
 Pick the recipe that matches your repository, then adjust the paths, commands, and artifact names for your project.
 
+Unless a recipe shows a full workflow file, the YAML snippet is a step that goes under `jobs.preview.steps` in the [no-build workflow](#no-build-step).
+
 ### Plugin in a subdirectory
+
+In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.preview.steps` with:
 
 ```yaml
 - uses: WordPress/action-wp-playground-pr-preview@v3
@@ -213,43 +217,64 @@ See the [Quick start with a build step](#with-a-build-step) above. The reusable 
 
 ### Monorepo with multiple plugins, all activated together
 
-```yaml
-# build
-artifacts: |
-  site-toolkit=build/site-toolkit.zip
-  site-analytics=build/site-analytics.zip
-build-command: |
-  for slug in site-toolkit site-analytics; do
-    ( cd "plugins/$slug" && zip -r "../../build/$slug.zip" . )
-  done
-```
+Use this when one pull request preview should install more than one built plugin. The build workflow creates one ZIP per plugin; the publish workflow uses a custom Blueprint that installs both ZIPs.
+
+Put the `artifacts` and `build-command` inputs under `jobs.build.with` in `.github/workflows/pr-preview-build.yml`:
 
 ```yaml
-# publish — replace `kind:` with a `blueprint:` template
-blueprint: |
-  {
-    "$schema": "https://playground.wordpress.net/blueprint-schema.json",
-    "steps": [
-      { "step": "installPlugin",
-        "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-toolkit}}" },
-        "options": { "activate": true } },
-      { "step": "installPlugin",
-        "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-analytics}}" },
-        "options": { "activate": true } }
-    ]
-  }
+jobs:
+  build:
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
+    with:
+      artifacts: |
+        site-toolkit=build/site-toolkit.zip
+        site-analytics=build/site-analytics.zip
+      build-command: |
+        set -euo pipefail
+        mkdir -p build stage
+        for slug in site-toolkit site-analytics; do
+          rm -rf "stage/$slug"
+          mkdir -p "stage/$slug"
+          rsync -a "plugins/$slug/" "stage/$slug/"
+          ( cd stage && zip -rq "../build/$slug.zip" "$slug" )
+        done
 ```
 
-`{{ARTIFACT_URL:<name>}}` is replaced with the public URL of the matching zip. The placeholder is JSON-string-safe — quotes, backslashes, and control characters in URLs are escaped, so the caller-side `"{{...}}"` quoting always produces valid JSON.
+Put the `blueprint` input under `jobs.publish.with` in `.github/workflows/pr-preview-publish.yml` instead of `kind: plugin`:
+
+```yaml
+jobs:
+  publish:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    with:
+      blueprint: |
+        {
+          "$schema": "https://playground.wordpress.net/blueprint-schema.json",
+          "steps": [
+            { "step": "installPlugin",
+              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-toolkit}}" },
+              "options": { "activate": true } },
+            { "step": "installPlugin",
+              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-analytics}}" },
+              "options": { "activate": true } }
+          ]
+        }
+```
+
+`{{ARTIFACT_URL:<name>}}` is replaced with the public URL of the matching ZIP. The `<name>` must match the left side of the corresponding `artifacts` entry, such as `site-toolkit`.
 
 Live: [example-monorepo](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo).
 
 ### Monorepo, install only the plugin touched by the PR
 
-The build script computes the diff against the base ref and writes a tailored `blueprint.json`. The publish workflow reads that blueprint from the artifact bundle.
+The build script computes the diff against the base ref and writes a tailored `blueprint.json`. The publish workflow reads that Blueprint from the artifact bundle.
+
+Put these inputs under `jobs.build.with` in the build workflow:
 
 ```yaml
-# build
 fetch-depth: 0          # so `git diff` against base ref works
 artifacts: |
   alpha=build/alpha.zip
@@ -257,8 +282,12 @@ artifacts: |
 blueprint-from-build: blueprint.json
 build-command: |
   set -euo pipefail
+  mkdir -p build stage
   for slug in alpha beta; do
-    ( cd "plugins/$slug" && zip -r "../../build/$slug.zip" . )
+    rm -rf "stage/$slug"
+    mkdir -p "stage/$slug"
+    rsync -a "plugins/$slug/" "stage/$slug/"
+    ( cd stage && zip -rq "../build/$slug.zip" "$slug" )
   done
   git fetch --no-tags --depth=50 origin "$GITHUB_BASE_REF"
   changed=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" \
@@ -276,17 +305,21 @@ build-command: |
   NODE
 ```
 
+Put this under `jobs.publish.with` in the publish workflow:
+
 ```yaml
-# publish
 blueprint-from-artifact: true
 ```
 
 Live: [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective). PR description blueprints decode to install **only** the plugin(s) the PR touched.
 
-### Composer **and** npm/Vite plugin
+### Plugin with PHP dependencies and built JavaScript/CSS
+
+Use this when the plugin needs both PHP dependencies and compiled front-end assets before Playground can run it. In this example, Composer installs production PHP dependencies, npm/Vite builds JavaScript and CSS, and the build workflow zips the finished plugin.
+
+Put these inputs under `jobs.build.with` in the build workflow:
 
 ```yaml
-# build
 artifacts: my-plugin=build/my-plugin.zip
 node-version: '20'
 php-version: '8.2'
@@ -313,12 +346,16 @@ build-command: |
   ( cd stage && zip -rq ../build/my-plugin.zip my-plugin )
 ```
 
-Publish workflow stays at `kind: plugin`. Live: [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite).
+The publish workflow can stay at `kind: plugin` because there is still only one plugin ZIP to install. Live: [example-composer-vite](https://github.com/adamziel/preview-in-playground-button-v3-example-composer-vite).
 
 
-### Plugin Check-style fork-safe preview
+### Built plugin with a custom Playground setup
 
-For a plugin with Composer dependencies and a custom landing page, build a production zip in `pull_request`, then let `workflow_run` publish the zip and post a button that opens directly to the plugin's admin screen:
+Use this when a built plugin needs more than the default "install and activate" preview. Common reasons include opening a specific admin page, installing PHP extensions, logging in automatically, or adding setup steps before the reviewer starts testing.
+
+The crux is that forked pull requests cannot safely run with write permissions. The build workflow runs untrusted code with read-only permissions and uploads only a ZIP artifact. The publish workflow runs later with write permissions, never checks out the pull request code, and substitutes the artifact URL into a Blueprint.
+
+Build workflow example:
 
 ```yaml
 # .github/workflows/pr-playground-preview-build.yml
@@ -332,19 +369,21 @@ jobs:
     uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
     with:
       php-version: '8.1'
-      artifacts: plugin-check=build/plugin-check.zip
+      artifacts: my-plugin=build/my-plugin.zip
       build-command: |
         set -euo pipefail
         composer install --no-dev --optimize-autoloader --no-interaction --no-progress
-        mkdir -p build/plugin-check
+        mkdir -p build/my-plugin
         rsync -a --delete \
           --exclude-from='.distignore' \
           --exclude='.git' \
           --exclude='.github' \
           --exclude='build' \
-          ./ build/plugin-check/
-        ( cd build && zip -qr plugin-check.zip plugin-check )
+          ./ build/my-plugin/
+        ( cd build && zip -qr my-plugin.zip my-plugin )
 ```
+
+Publish workflow example:
 
 ```yaml
 # .github/workflows/pr-playground-preview-publish.yml
@@ -368,18 +407,18 @@ jobs:
       blueprint: |
         {
           "$schema": "https://playground.wordpress.net/blueprint-schema.json",
-          "landingPage": "/wp-admin/tools.php?page=plugin-check",
+          "landingPage": "/wp-admin/admin.php?page=my-plugin",
           "phpExtensionBundles": ["kitchen-sink"],
           "steps": [
             { "step": "login", "username": "admin", "password": "password" },
             { "step": "installPlugin",
-              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:plugin-check}}" },
+              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:my-plugin}}" },
               "options": { "activate": true } }
           ]
         }
 ```
 
-The important parts are the artifact name (`plugin-check`) and the matching `{{ARTIFACT_URL:plugin-check}}` placeholder. The reusable publish workflow derives the PR number and head SHA from the workflow-run artifact name, so you do not need to upload a separate metadata artifact.
+The important connection is the artifact name. `artifacts: my-plugin=...` in the build workflow creates an artifact URL placeholder named `{{ARTIFACT_URL:my-plugin}}` for the publish workflow. Use that placeholder anywhere a Blueprint needs the public ZIP URL.
 
 ### Post the button as a comment instead of editing the description
 
