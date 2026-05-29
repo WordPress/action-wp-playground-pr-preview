@@ -1,14 +1,16 @@
-# "Try it in Playground" GitHub Workflow for WordPress
+# WordPress Playground PR Preview Action
 
-This workflow automatically adds a "Try it in Playground" button to your pull requests, enabling easy testing and feedback for WordPress plugins and themes.
+Add a WordPress Playground preview link to pull requests for WordPress plugins and themes.
 
-<img width="1000" alt="CleanShot 2025-11-10 at 11 29 52@2x" src="https://github.com/user-attachments/assets/631e793d-3e56-4f74-940e-eac60919f52d" />
+The action builds a Playground URL, then publishes it either in the pull request description or in a managed pull request comment. For plugins and themes that can run directly from the repository, the action can generate the WordPress Blueprint for you. For projects that need a build step, see [Testing built CI artifacts](#testing-built-ci-artifacts).
 
-## Usage
+<img width="1000" alt="Pull request with a WordPress Playground preview button" src="https://github.com/user-attachments/assets/631e793d-3e56-4f74-940e-eac60919f52d" />
 
-Say you're developing a plugin called `my-awesome-plugin` and your source code lives in the repository root. Even though this workflow supports testing CI artifacts, for now assume your plugin doesn't have a build step.
+## Quick start
 
-To enable the "Try it in Playground" button, create a `.github/workflows/pr-preview.yml` file in your repository with the following content:
+Use this setup when your plugin can be installed directly from the repository, without a build step. This example assumes the plugin files live in the repository root.
+
+Create `.github/workflows/pr-preview.yml`:
 
 ```yaml
 name: PR Preview
@@ -23,31 +25,20 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Post Playground Preview Button
+      - name: Post Playground preview button
         uses: WordPress/action-wp-playground-pr-preview@v2
         with:
-          # "append-to-description"  – add the button to the PR description
-          # "comment"           – create a new comment with the preview button
-          mode: "append-to-description"
-
-          # Use "." if plugin is in repository root
           plugin-path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-> **Important:** `WordPress/action-wp-playground-pr-preview@v2` is a regular action. Always reference it inside a job step (under `jobs.<job_id>.steps`). GitHub only allows `jobs.<job_id>.uses` for reusable workflows that point to another workflow file such as `owner/repo/.github/workflows/workflow.yml@ref`.
+`WordPress/action-wp-playground-pr-preview@v2` is a GitHub Action, not a reusable workflow. Use it inside a job step, as shown above.
 
-## Examples
+By default, the action appends a managed block to the pull request description. Re-running the workflow updates that block instead of adding another button.
 
-### Plugin repository without a CI build process
+## Common examples
 
-See the usage example above. You may also want to inspect a live repository that uses this action: [adamziel/preview-in-playground-button-plugin-example](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/3).
-
-### Plugin or theme repository with a CI build process
-
-See the [preview-in-playground-button-built-artifact-example](#advanced-testing-built-ci-artifacts) section below for an example of how to test built artifacts in WordPress Playground.
-
-### Theme repository without a CI build process
+### Theme in the repository root
 
 ```yaml
 name: PR Preview
@@ -62,24 +53,29 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - name: Post Playground Preview Button
+      - name: Post Playground preview button
         uses: WordPress/action-wp-playground-pr-preview@v2
         with:
-          # Use "." if theme is in repository root
           theme-path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### Plugin in a subdirectory
 
-If your plugin lives in `plugins/my-awesome-plugin/`:
-
 ```yaml
 with:
   plugin-path: plugins/my-awesome-plugin
 ```
 
-### Post as comment instead of updating description
+### Theme and plugin together
+
+```yaml
+with:
+  plugin-path: plugins/my-plugin
+  theme-path: themes/my-theme
+```
+
+### Publish the preview as a comment
 
 ```yaml
 with:
@@ -87,9 +83,11 @@ with:
   mode: comment
 ```
 
-### Custom Blueprint
+In `comment` mode, the action updates one managed comment on later runs rather than creating duplicates.
 
-For advanced configurations, you can provide a custom blueprint:
+### Use a custom Blueprint JSON string
+
+Use `blueprint` when you need a Playground setup that the `plugin-path` and `theme-path` shortcuts cannot describe.
 
 ```yaml
 name: PR Playground Preview
@@ -118,13 +116,14 @@ jobs:
                     url: `https://github.com/${context.repo.owner}/${context.repo.repo}.git`,
                     ref: context.payload.pull_request.head.ref,
                     path: "/"
-                  }
+                  },
+                  options: { activate: true }
                 },
                 {
-                  "step": "installPlugin",
-                  "pluginData": {
-                    "resource": "wordpress.org/plugins",
-                    "slug": "woocommerce"
+                  step: "installPlugin",
+                  pluginData: {
+                    resource: "wordpress.org/plugins",
+                    slug: "woocommerce"
                   }
                 }
               ]
@@ -133,7 +132,7 @@ jobs:
           result-encoding: string
 
   playground-preview:
-    name: Post Playground Preview Button
+    name: Post Playground preview button
     needs: create-blueprint
     runs-on: ubuntu-latest
     permissions:
@@ -146,9 +145,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-### External Blueprint URL
+When `blueprint` is set, `plugin-path` and `theme-path` are ignored.
 
-Already hosting your blueprint JSON elsewhere? Provide a `blueprint-url` input pointing to that file:
+### Link to a Blueprint hosted elsewhere
+
+If you already publish a Blueprint JSON file at a public URL, pass that URL with `blueprint-url`:
 
 ```yaml
 with:
@@ -156,11 +157,11 @@ with:
   blueprint-url: https://example.com/path/to/blueprint.json
 ```
 
-When `blueprint-url` is set, you can omit `plugin-path`, `theme-path`, and `blueprint`—the action links directly to the remote blueprint via `?blueprint-url=...`.
+When `blueprint-url` is set, the action links Playground directly to that URL. You do not need to set `plugin-path`, `theme-path`, or `blueprint`.
 
-### Customize the preview button/comment
+### Customize the description or comment
 
-Customize the preview button appearance:
+Use `description-template` for `append-to-description` mode:
 
 ```yaml
 with:
@@ -174,62 +175,61 @@ with:
     **Testing:** Plugin `{{PLUGIN_SLUG}}`
 ```
 
-Or customize comment format:
+Use `comment-template` with `mode: comment`:
 
 ```yaml
 with:
   mode: comment
+  plugin-path: .
   comment-template: |
     ## Preview Changes in WordPress Playground
 
     {{PLAYGROUND_BUTTON}}
 
     ### Testing Instructions
-    1. Click the button above to open Playground
-    2. Navigate to Plugins → Installed Plugins
-    3. Verify that `{{PLUGIN_SLUG}}` is active
-    4. Test the new functionality
+    1. Click the button above to open Playground.
+    2. Navigate to Plugins → Installed Plugins.
+    3. Verify that `{{PLUGIN_SLUG}}` is active.
+    4. Test the changes in this pull request.
 
     **PR:** #{{PR_NUMBER}} - {{PR_TITLE}}
 ```
 
-## Usage in other repositories
+## Example repositories
 
-* WordPress/blueprints: [CI workflow](https://raw.githubusercontent.com/WordPress/blueprints/6390c687c03035e088d1646cad28b8310bb3f705/.github/workflows/preview-comment.yml), [Sample PR](https://github.com/WordPress/blueprints/pull/155)
-* adamziel/preview-in-playground-button-plugin-example: [CI workflow](https://raw.githubusercontent.com/adamziel/preview-in-playground-button-plugin-example/d15b741deaae32ebef5bdf1009aaed3c614e6f4a/.github/workflows/pr-playground-preview.yml), [Sample PR](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/3)
-* adamziel/preview-in-playground-button-built-artifact-example: [CI workflow](https://raw.githubusercontent.com/adamziel/preview-in-playground-button-built-artifact-example/83f91ecf83843b102d19afdf56802b2608a2e98f/.github/workflows/pr-playground-preview.yml), [Sample PR](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2)
+- WordPress/blueprints: [CI workflow](https://raw.githubusercontent.com/WordPress/blueprints/6390c687c03035e088d1646cad28b8310bb3f705/.github/workflows/preview-comment.yml), [sample PR](https://github.com/WordPress/blueprints/pull/155)
+- adamziel/preview-in-playground-button-plugin-example: [CI workflow](https://raw.githubusercontent.com/adamziel/preview-in-playground-button-plugin-example/d15b741deaae32ebef5bdf1009aaed3c614e6f4a/.github/workflows/pr-playground-preview.yml), [sample PR](https://github.com/adamziel/preview-in-playground-button-plugin-example/pull/3)
+- adamziel/preview-in-playground-button-built-artifact-example: [CI workflow](https://raw.githubusercontent.com/adamziel/preview-in-playground-button-built-artifact-example/83f91ecf83843b102d19afdf56802b2608a2e98f/.github/workflows/pr-playground-preview.yml), [sample PR](https://github.com/adamziel/preview-in-playground-button-built-artifact-example/pull/2)
 
 ## Inputs
 
 ### `mode`
 
-**Optional** How to publish the preview button.
+**Optional.** How to publish the preview link.
 
 Accepted values:
-- `append-to-description` (default) – Automatically updates the PR description with a managed block containing the preview button. The block is wrapped in HTML comment markers (`<!-- wp-playground-preview:start -->` and `<!-- wp-playground-preview:end -->`) so it can be updated on subsequent workflow runs.
-- `comment` – Posts the preview button as a PR comment. Updates the same comment on subsequent runs rather than creating duplicates.
+
+- `append-to-description` (default): updates a managed block in the pull request description. The block is wrapped in `<!-- wp-playground-preview:start -->` and `<!-- wp-playground-preview:end -->` markers.
+- `comment`: posts or updates a managed pull request comment.
 
 **Default:** `append-to-description`
 
 ### `playground-host`
 
-**Optional** Base WordPress Playground host URL used to build the preview link.
-
-The workflow appends blueprint parameters to this URL to create the final preview link.
+**Optional.** Base WordPress Playground host URL used to build the preview link.
 
 **Default:** `https://playground.wordpress.net`
 
 ### `blueprint`
 
-**Optional** Custom WordPress Blueprint as a JSON string.
+**Optional.** Complete WordPress Blueprint JSON, passed as a string.
 
-When provided, this blueprint is used as-is and the `plugin-path` and `theme-path` inputs are ignored. If omitted, the workflow automatically generates a blueprint based on `plugin-path` or `theme-path`.
+Use this when you want full control over the Playground setup. If this input is set, `plugin-path` and `theme-path` are ignored.
 
-The blueprint must be a complete, ready-to-use JSON object (not a template). It will be URL-encoded and passed to Playground via the `blueprint-url` parameter.
+Learn more about Blueprints: https://wordpress.github.io/wordpress-playground/blueprints/
 
-Learn more about blueprints: https://wordpress.github.io/wordpress-playground/blueprints/
+Example:
 
-**Example (custom blueprint with specific WordPress version):**
 ```yaml
 with:
   blueprint: |
@@ -254,23 +254,27 @@ with:
     }
 ```
 
+### `blueprint-url`
+
+**Optional.** Public URL for a Blueprint JSON file.
+
+Use this when another workflow or service already publishes the Blueprint. If this input is set, the action uses it directly in the Playground link.
+
 ### `plugin-path`
 
-**Optional** Installs and activates a plugin from a path inside the repository.
+**Optional.** Path to a WordPress plugin directory inside the repository.
 
-This is a shortcut for plugins that don't need any bundling and can be installed directly from the repository.
+Use this shortcut when the plugin can be installed directly from the repository. The directory should contain a valid WordPress plugin file.
 
-The path string should point to a directory containing a valid WordPress plugin with a main plugin file.
+This option is ignored if `blueprint` is provided.
 
-This option is ignored if the `blueprint` input is provided.
+Examples:
 
-**Example (plugin in repository root):**
 ```yaml
 with:
   plugin-path: .
 ```
 
-**Example (plugin in subdirectory):**
 ```yaml
 with:
   plugin-path: plugins/my-awesome-plugin
@@ -278,209 +282,160 @@ with:
 
 ### `theme-path`
 
-**Optional** Installs and activates a theme from a path inside the repository.
+**Optional.** Path to a WordPress theme directory inside the repository.
 
-The path string should point to a directory containing a valid WordPress theme with a style.css file.
+The directory should contain a valid WordPress theme, including `style.css`.
 
-This option is ignored if the `blueprint` input is provided.
+This option is ignored if `blueprint` is provided.
 
-**Example (theme in repository root):**
+Examples:
+
 ```yaml
 with:
   theme-path: .
 ```
 
-**Example (theme in subdirectory):**
 ```yaml
 with:
   theme-path: themes/my-cool-theme
 ```
 
-**Example (testing theme + plugin):**
-```yaml
-with:
-  plugin-path: plugins/my-plugin
-  theme-path: themes/my-theme
-```
-
 ### `description-template`
 
-**Optional** Custom markdown/HTML template for the content added to PR descriptions (only used in `append-to-description` mode).
+**Optional.** Markdown/HTML template for content added to the pull request description. Only used in `append-to-description` mode.
 
-The template supports variable interpolation using `{{VARIABLE_NAME}}` syntax (case-insensitive). The rendered content will be wrapped in HTML comment markers so it can be updated on subsequent runs.
+The rendered content is wrapped in managed markers so it can be updated by later workflow runs.
 
-**Available template variables:**
-- `{{PLAYGROUND_BUTTON}}` - Rendered preview button HTML (recommended to include)
-- `{{PLAYGROUND_URL}}` - Full URL to the Playground preview
-- `{{PLAYGROUND_BUTTON_IMAGE_URL}}` - URL to the button image
-- `{{PLAYGROUND_BLUEPRINT_JSON}}` - Complete blueprint JSON string
-- `{{PLAYGROUND_BLUEPRINT_DATA_URL}}` - Data URL containing the blueprint
-- `{{PLAYGROUND_HOST}}` - Playground host URL
-- `{{PR_NUMBER}}` - Pull request number
-- `{{PR_TITLE}}` - Pull request title
-- `{{PR_HEAD_REF}}` - Source branch name
-- `{{PR_HEAD_SHA}}` - Latest commit SHA
-- `{{PR_BASE_REF}}` - Target branch name
-- `{{REPO_OWNER}}` - Repository owner username/org
-- `{{REPO_NAME}}` - Repository name
-- `{{REPO_FULL_NAME}}` - Full repository name (owner/repo)
-- `{{REPO_SLUG}}` - Sanitized repository name
-- `{{PLUGIN_PATH}}` - Plugin path (if provided)
-- `{{PLUGIN_SLUG}}` - Derived plugin slug
-- `{{THEME_PATH}}` - Theme path (if provided)
-- `{{THEME_SLUG}}` - Derived theme slug
+**Default:**
 
-**Default template:**
-```
+```markdown
 {{PLAYGROUND_BUTTON}}
-```
-
-**Example (custom template with additional context):**
-```yaml
-with:
-  description-template: |
-    ### Test this PR in WordPress Playground
-
-    {{PLAYGROUND_BUTTON}}
-
-    **Branch:** {{PR_HEAD_REF}}
-    **Testing:** Plugin `{{PLUGIN_SLUG}}`
 ```
 
 ### `comment-template`
 
-**Optional** Custom markdown/HTML template for PR comments (only used in `comment` mode).
+**Optional.** Markdown/HTML template for the managed pull request comment. Only used in `comment` mode.
 
-The template supports variable interpolation using `{{VARIABLE_NAME}}` syntax (case-insensitive). The rendered comment will include a hidden identifier marker so it can be updated on subsequent runs.
+The rendered comment includes a hidden marker so the action can update the same comment on later runs.
 
-**Available template variables:** Same as `description-template` above.
+**Default:**
 
-**Default template:**
 ```markdown
 ### WordPress Playground Preview
 
-The changes in this pull request can previewed and tested using a WordPress Playground instance.
+The changes in this pull request can be previewed and tested in WordPress Playground.
 
 {{PLAYGROUND_BUTTON}}
 ```
 
-**Example (custom comment with testing instructions):**
-```yaml
-with:
-  mode: comment
-  comment-template: |
-    ## Preview Changes in WordPress Playground
+### Template variables
 
-    {{PLAYGROUND_BUTTON}}
+`description-template` and `comment-template` support case-insensitive `{{VARIABLE_NAME}}` placeholders.
 
-    ### Testing Instructions
-    1. Click the button above to open Playground
-    2. Navigate to Plugins → Installed Plugins
-    3. Verify that `{{PLUGIN_SLUG}}` is active
-    4. Test the new functionality
+Available variables:
 
-    **PR:** #{{PR_NUMBER}} - {{PR_TITLE}}
-```
+- `{{PLAYGROUND_BUTTON}}`: rendered preview button HTML
+- `{{PLAYGROUND_URL}}`: full URL to the Playground preview
+- `{{PLAYGROUND_BUTTON_IMAGE_URL}}`: URL to the button image
+- `{{PLAYGROUND_BLUEPRINT_JSON}}`: generated or supplied Blueprint JSON string
+- `{{PLAYGROUND_BLUEPRINT_DATA_URL}}`: data URL containing the Blueprint, or the supplied `blueprint-url`
+- `{{PLAYGROUND_HOST}}`: Playground host URL
+- `{{PR_NUMBER}}`: pull request number
+- `{{PR_TITLE}}`: pull request title
+- `{{PR_HEAD_REF}}`: source branch name
+- `{{PR_HEAD_SHA}}`: latest commit SHA
+- `{{PR_BASE_REF}}`: target branch name
+- `{{REPO_OWNER}}`: repository owner
+- `{{REPO_NAME}}`: repository name
+- `{{REPO_FULL_NAME}}`: full repository name (`owner/repo`)
+- `{{REPO_ARCHIVE_ROOT}}`: generated archive root directory name
+- `{{REPO_SLUG}}`: sanitized repository name
+- `{{PLUGIN_PATH}}`: plugin path, if provided
+- `{{PLUGIN_SLUG}}`: derived plugin slug, if `plugin-path` is provided
+- `{{THEME_PATH}}`: theme path, if provided
+- `{{THEME_SLUG}}`: derived theme slug, if `theme-path` is provided
 
 ### `restore-button-if-removed`
 
-**Optional** Only applies to `append-to-description` mode.
+**Optional.** Controls what happens when the managed description block is missing. Only used in `append-to-description` mode.
 
-Controls whether the preview button is automatically restored to the PR description if removed by the PR author.
+When set to `true`, the action adds the managed block again on the next run. When set to `false`, the action leaves the pull request description unchanged if the block has been removed.
 
-**When `true` (default):**
-- If PR author completely removes the button markers → workflow re-adds them on next run
-- If PR author replaces button with custom placeholder → workflow respects it (does not update)
+The action also respects custom content between the managed markers. This lets a PR author replace the button with a note without the workflow overwriting it:
 
-**When `false`:**
-- If PR author completely removes the button markers → they stay removed
-- If markers exist with custom placeholder → workflow respects it (does not update)
-- If markers exist with the button → workflow updates the button normally
-
-**How PR authors can keep the button removed:**
-1. Replace with placeholder (always works):
-   ```html
-   <!-- wp-playground-preview:start -->
-   <!-- Preview button hidden by PR author -->
-   <!-- wp-playground-preview:end -->
-   ```
-
-2. Delete completely (only works when this is set to false):
-   Delete the entire managed block including the markers
-
-**Example (respect when PR author removes button):**
-```yaml
-with:
-  mode: append-to-description
-  restore-button-if-removed: false
+```html
+<!-- wp-playground-preview:start -->
+<!-- Preview button hidden by PR author -->
+<!-- wp-playground-preview:end -->
 ```
 
 **Default:** `true`
 
-## Secrets
-
 ### `github-token`
 
-**Optional** GitHub token used to update PR descriptions and post/update comments.
+**Required.** GitHub token used to update pull request descriptions and comments.
 
-If not provided, defaults to the calling workflow's `GITHUB_TOKEN` (recommended for most cases).
+For most workflows, pass `${{ secrets.GITHUB_TOKEN }}` and include the permissions block shown in the examples. The token needs:
 
-**Required permissions:**
-- `pull-requests: write` - To update PR descriptions and manage comments
-- `contents: read` - To access repository information
+- `pull-requests: write`
+- `contents: read`
 
-The default `GITHUB_TOKEN` automatically has these permissions in most workflows.
-
-Only provide a custom token if you need to:
-- Use a fine-grained personal access token with specific permissions
-- Work around workflow restrictions in your repository
-
-**Example:**
+Example:
 
 ```yaml
 steps:
   - uses: WordPress/action-wp-playground-pr-preview@v2
     with:
       plugin-path: .
-      github-token: ${{ secrets.CUSTOM_TOKEN }}
+      github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+### `pr-number`
+
+**Optional.** Pull request number to update.
+
+Normally the action reads the pull request number from the `pull_request` event payload. Set this input when the action runs from another event, such as `workflow_run`, and needs to update the original pull request.
 
 ## Outputs
 
-- `preview-url`: The full URL to the WordPress Playground preview.
-- `blueprint-json`: The complete blueprint JSON string used for the preview.
-- `rendered-description`: The rendered description content (when using `append-to-description` mode).
-- `rendered-comment`: The rendered comment content (when using `comment` mode).
-- `mode`: The mode used for publishing the preview.
-- `comment-id`: The ID of the created/updated comment (when using `comment` mode).
+- `preview-url`: full URL to the WordPress Playground preview.
+- `blueprint-json`: Blueprint JSON string used for the preview.
+- `rendered-description`: rendered description content for `append-to-description` mode.
+- `rendered-comment`: rendered comment content for `comment` mode.
+- `mode`: publish mode used by the action.
+- `comment-id`: ID of the created or updated comment in `comment` mode.
 
----
+## Testing built CI artifacts
 
-## Advanced: Testing Built CI Artifacts
+Use the `plugin-path` and `theme-path` shortcuts only when Playground can install files directly from the repository. If your project needs a build step, publish the built ZIP somewhere Playground can download it, then pass a Blueprint that installs that ZIP.
 
-If your plugin or theme requires a build step, you can use the `expose-artifact-on-public-url` action to publish CI artifacts on a URL that WordPress Playground can fetch. Under the hood the action uploads ZIP files to one draft release (shared across all PRs) and keeps only the most recent artifacts you tell it to keep.
+This repository includes a helper action for that case:
 
-> **:warning: Important Notice:**  
-> Before using the preview button with artifacts you **must make the draft release public (publish it or flag it as a pre-release)**. Otherwise WordPress Playground cannot download the ZIP and the button fails.
+```yaml
+uses: WordPress/action-wp-playground-pr-preview/.github/actions/expose-artifact-on-public-url@v2
+```
 
-### Why two workflow files?
+The helper downloads a GitHub Actions artifact, uploads the ZIP to a GitHub release, and returns a public download URL. The main preview action can then use that URL in a custom Blueprint.
 
-Pull requests from forks run with the more restrictive `pull_request` security model: they cannot access repository secrets, cannot write to releases, and cannot update PR descriptions. The safest pattern is therefore to split the process into two workflows:
+> [!IMPORTANT]
+> WordPress Playground must be able to download the ZIP without authentication. The helper creates a draft release when the release does not exist. Publish that release before relying on the generated preview links. It can be marked as a pre-release if you do not want it to look like a normal project release.
 
-- `PR Playground Preview - Build` runs on every `pull_request` with the default read-only token. It builds your ZIP and uploads it as an artifact. Because forked PRs run this workflow in the base repository, the artifact always ends up in a trusted account even when the code came from a fork.
-- `PR Playground Preview - Publish` is triggered via `workflow_run` only after the build workflow succeeds. This job runs with `contents: write` and `pull-requests: write`, so it can expose the artifact on a release, generate a Playground blueprint, and update the PR description. It never checks out the untrusted code—it just manipulates artifacts produced by the build workflow.
+### Why the artifact example uses two workflows
 
-This separation keeps secrets and write permissions away from untrusted code while still giving fork contributors the same Playground experience.
+Pull requests from forks run with limited permissions. They cannot access repository secrets, write to releases, or update pull request descriptions. For repositories that accept forked PRs and need built artifacts, split the process into two workflows:
 
-### Workflow 1: `PR Playground Preview - Build`
+1. A `pull_request` workflow builds the ZIP with read-only permissions and uploads it as a workflow artifact.
+2. A `workflow_run` workflow runs after the build succeeds. It has write permissions, reads the artifact from the completed build, exposes the ZIP on a release, and updates the pull request.
 
-Create `.github/workflows/pr-playground-preview-build.yml` (or similar) with a minimal set of permissions. The example below builds a Gutenberg ZIP and names the artifact with both the PR number and the head SHA so the publish workflow can map the correct preview back to the PR.
+This keeps write permissions away from untrusted pull request code.
+
+### Workflow 1: build the ZIP
+
+Create `.github/workflows/pr-playground-preview-build.yml`. This example builds a Gutenberg ZIP and names the artifact with the pull request number and head SHA so the publish workflow can find the matching artifact.
 
 ```yaml
 name: PR Playground Preview - Build
 
-# Use pull_request for untrusted code with read-only permissions
-# No access to secrets, no write permissions
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
@@ -494,7 +449,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Explicitly disable credential persistence for security
           persist-credentials: false
 
       - uses: actions/setup-node@v4
@@ -515,16 +469,13 @@ jobs:
           if-no-files-found: error
 ```
 
-### Workflow 2: `PR Playground Preview - Publish`
+### Workflow 2: expose the ZIP and post the preview
 
-Create a second workflow (for example `.github/workflows/pr-playground-preview-publish.yml`) that listens for the build workflow to finish. Because it runs in a separate, privileged workflow you can safely grant it `contents: write` and `pull-requests: write`. The script step at the beginning finds the artifact that belongs to the originating PR, and the remaining steps expose the ZIP, build a blueprint, and append the Playground button to the PR description.
+Create `.github/workflows/pr-playground-preview-publish.yml`. This workflow runs after the build workflow succeeds.
 
 ```yaml
 name: PR Playground Preview - Publish
 
-# Use workflow_run for privileged operations
-# Runs with write permissions and access to secrets
-# Operates on artifacts from the unprivileged build workflow
 on:
   workflow_run:
     workflows: ["PR Playground Preview - Build"]
@@ -538,7 +489,6 @@ permissions:
 jobs:
   publish-preview:
     runs-on: ubuntu-latest
-    # Only run if the build workflow succeeded and was triggered by a pull_request
     if: >
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.conclusion == 'success'
@@ -565,7 +515,6 @@ jobs:
               throw new Error('Could not find plugin artifact');
             }
 
-            // Parse: gutenberg-plugin-zip-pr123-abc123def...
             const match = artifact.name.match(/^gutenberg-plugin-zip-pr(\d+)-(.+)$/);
             if (!match) {
               throw new Error(`Could not parse artifact name: ${artifact.name}`);
@@ -623,120 +572,97 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Key takeaways from this setup:
+The important details are:
 
-- `artifact-source-run-id` tells the action to read artifacts created by the build workflow. You never need to redownload or re-upload ZIPs manually.
-- The naming convention `gutenberg-plugin-zip-pr${PR}-${SHA}` makes it trivial to recover the PR number and commit from inside the publish workflow.
-- `artifacts-to-keep` automatically prunes old ZIPs for the same PR so your release draft does not grow without bounds.
+- The build artifact name includes the PR number and commit SHA.
+- `artifact-source-run-id` tells the helper to download the artifact from the completed build workflow.
+- `pr-number` tells the main preview action which pull request to update, because the second workflow runs on `workflow_run` rather than `pull_request`.
+- `artifacts-to-keep` prunes older ZIPs for the same PR.
 
-You can adapt the same pattern for theme builds, different package managers, or multiple artifacts—just ensure the publish workflow can deterministically find the right artifact name for each PR.
+You can use the same pattern for themes, different build commands, or multiple artifacts. Keep the artifact naming predictable so the publish workflow can identify the right file.
 
-### Expose Artifact Inputs
+## Expose artifact helper inputs
 
-#### `artifact-name`
+### `artifact-name`
 
-**Required** Name of the GitHub Actions artifact to expose on a public URL
+**Required.** Name of the GitHub Actions artifact to expose.
 
-This should match the name used in actions/upload-artifact@v4 in the build job.
-The artifact should contain a single zip file.
+This should match the `name` used by `actions/upload-artifact@v4`. The artifact should contain a single ZIP file.
 
-Some artifacts have dynamic names, e.g. `built-plugin-${{ github.event.pull_request.number }}-${{ github.sha }}`.
-You can use the same syntax to format the artifact-name for this job.
+### `artifact-filename`
 
-Example: 'built-plugin'
-
-#### `artifact-filename`
-
-**Optional** Name of the zip file inside the downloaded artifact bundle.
+**Optional.** Name of the ZIP file inside the downloaded artifact.
 
 **Default:** `plugin.zip`
 
-Set this if your artifact uploads a differently named ZIP (for example `theme.zip`).
+### `artifact-source-run-id`
 
-#### `artifact-source-run-id`
+**Optional.** ID of the workflow run that uploaded the artifact.
 
-**Optional** ID of the workflow run that originally uploaded the artifact.
+Use this in a `workflow_run` workflow to read artifacts from the completed build run.
 
-**Default:** Uses the current workflow run.
+**Default:** current workflow run.
 
-Set this input when you're running the action in a `workflow_run` (or any other) workflow that needs to pull artifacts from a *different* run. Example: `${{ github.event.workflow_run.id }}`.
+### `artifact-source-repository`
 
-#### `artifact-source-repository`
+**Optional.** Repository (`owner/name`) that owns the workflow run referenced by `artifact-source-run-id`.
 
-**Optional** Repository (`owner/name`) that owns the workflow run referenced by `artifact-source-run-id`.
+**Default:** repository running the workflow.
 
-**Default:** Uses the repository that invokes the action.
+### `pr-number`
 
-Only override this when your build workflow runs in another repository.
+**Required.** Pull request number used in the exposed ZIP filename and cleanup matching.
 
-#### `pr-number`
+### `commit-sha`
 
-**Required** The current pull request number.
+**Required.** Commit SHA used in the exposed ZIP filename.
 
-**Example:** `${{ github.event.pull_request.number }}`
+### `artifacts-to-keep`
 
-#### `commit-sha`
+**Optional.** Number of most recent release assets to keep for this PR. Set to `keep-all` to disable count-based pruning.
 
-**Required** The current commit SHA.
+**Default:** `2`
 
-**Example:** `${{ github.sha }}`
+### `release-tag`
 
-#### `artifacts-to-keep`
-
-**Optional** Number of most recent artifacts to keep for this PR (default: 2)
-
-After exposing a new artifact, this workflow automatically deletes older
-artifacts for the same PR, keeping only the N most recent.
-
-#### `release-tag`
-
-**Optional** GitHub release tag to use for exposing artifacts.
+**Optional.** GitHub release tag used to store exposed artifacts.
 
 **Default:** `ci-artifacts`
 
-#### `release-repository`
+### `release-repository`
 
-**Optional** Target repository in `owner/name` form when you want to store artifacts somewhere other than the current repository.
+**Optional.** Repository (`owner/name`) where release assets should be stored.
 
-**Default:** Uses the repository that runs the workflow.
+**Default:** repository running the workflow.
 
-#### `create-release-if-missing`
+### `create-release-if-missing`
 
-**Optional** Automatically creates the `release-tag` if it does not already exist.
-
-**Default:** `true`
-
-#### `cleanup-enabled`
-
-**Optional** Set to `false` to skip deleting older artifacts for the same PR.
+**Optional.** Creates `release-tag` as a draft release if it does not already exist.
 
 **Default:** `true`
 
-#### `github-token`
+### `cleanup-enabled`
 
-**Optional** Token with `contents: write` access to the release repository.
+**Optional.** Set to `false` to skip cleanup of older artifacts for the same PR.
 
-If omitted, the action falls back to the workflow's `${{ secrets.GITHUB_TOKEN }}`.
+**Default:** `true`
 
-### Expose Artifact Outputs
+### `github-token`
 
-#### `artifact-url`
+**Optional.** Token with `contents: write` access to the release repository.
 
-Public download URL for the exposed artifact.
+If omitted, the helper uses the workflow's default GitHub token.
 
-**Format:** `https://github.com/OWNER/REPO/releases/download/TAG/pr-NUMBER-SHA.zip`
+## Expose artifact helper outputs
 
-#### `artifact-name`
-
-Filename of the exposed artifact.
-
-**Format:** `pr-NUMBER-SHA.zip`
+- `artifact-url`: public download URL for the exposed ZIP.
+- `artifact-name`: filename of the exposed ZIP, in the format `pr-NUMBER-SHA.zip`.
 
 ## Troubleshooting
 
-### GitHub reports a `workflow-call` lint error
+### GitHub reports a reusable workflow lint error
 
-If you see `reusable workflow call ... is not following the format "owner/repo/path/to/workflow.yml@ref"`, it means you tried to run this action as a reusable workflow. `WordPress/action-wp-playground-pr-preview@v2` is a regular action, so keep it under `jobs.<job_id>.steps`:
+If GitHub says `reusable workflow call ... is not following the format "owner/repo/path/to/workflow.yml@ref"`, the action was probably used as a reusable workflow. Move it under `jobs.<job_id>.steps`:
 
 ```yaml
 jobs:
@@ -751,24 +677,34 @@ jobs:
 
 ### CI artifacts are not accessible in WordPress Playground
 
-As mentioned in [Advanced: Testing Built CI Artifacts](#advanced-testing-built-ci-artifacts), the artifact helper stores files on a single draft release. Draft releases remain private until they are published. Publish or mark that release as a pre-release so the download URL becomes public; otherwise WordPress Playground cannot fetch the zip and the preview button fails.
+The artifact helper stores ZIPs as GitHub release assets. If the release is still a draft, unauthenticated visitors cannot download those assets. Publish the release so WordPress Playground can fetch the ZIP. It can be marked as a pre-release if you do not want it to look like a normal project release.
 
-### Workflow fails with "Resource not accessible by integration"
+### Workflow fails with `Resource not accessible by integration`
 
-Updating PR descriptions or comments requires the workflow (or custom token) to have `pull-requests: write` plus `contents: read`. Add the permissions block from the basic example or provide a PAT with the same scopes. Without those permissions GitHub blocks the API call and you will see this error in the `Post Playground Preview Button` step.
+The token cannot update the pull request. Add this permissions block to the workflow, or provide a token with equivalent access:
 
-### Step fails with "You must configure plugin-path/theme-path/blueprint"
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+```
 
-The action needs either `plugin-path`, `theme-path`, `blueprint`, or `blueprint-url`. Forgetting to set any of them causes an early failure. Point `plugin-path` or `theme-path` to the folder that contains `my-plugin.php` or `style.css`, or pass a custom blueprint if you have more complex needs.
+### Step fails with `One of plugin-path, theme-path, blueprint, or blueprint-url inputs is required`
+
+The action needs to know what Playground should install. Set `plugin-path`, `theme-path`, `blueprint`, or `blueprint-url`.
 
 ### Playground opens but plugin changes look stale
 
-When the plugin lives in a subdirectory (for example, `plugins/my-awesome-plugin`), you must point `plugin-path` at that subfolder. Otherwise the action zips the repository root and Playground never loads your updated code. The same applies to built artifacts—ensure the uploaded ZIP contains the build you expect.
+Check that `plugin-path` or `theme-path` points to the directory that contains the plugin or theme files. For built artifacts, check that the uploaded ZIP contains the build output you expect.
 
-### Custom blueprint fails with "Unexpected token" or blank Playground
+### Custom Blueprint fails with a JSON error or opens a blank Playground
 
-Custom blueprints are JSON strings; a missing comma or dangling comment will break the preview. Validate the blueprint locally (e.g., `node -e 'JSON.parse(fs.readFileSync("blueprint.json"))'`) before passing it through the workflow, or store it in a separate `.json` file and feed it via `blueprint-url`.
+Custom Blueprints must be valid JSON. Validate the JSON before passing it to the action. For example:
+
+```bash
+node -e 'JSON.parse(require("fs").readFileSync("blueprint.json", "utf8"))'
+```
 
 ## License
 
-This project is licensed under the GPL-2.0-or-later License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL-2.0-or-later License. See [LICENSE](LICENSE) for details.
