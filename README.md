@@ -209,6 +209,64 @@ Use this when a PR should preview a plugin and a theme from the same repository.
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### PR description Blueprint overrides
+
+Use this when the default preview should exist for every pull request, but an
+individual PR needs to guide reviewers to a specific screen, install a companion
+plugin, or seed a small option without committing a one-off file to the branch.
+
+```yaml
+- uses: WordPress/action-wp-playground-pr-preview@v3
+  with:
+    plugin-path: .
+    blueprint-override-source: pr-description
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+By default, PRs from forks ignore PR-description Blueprint overrides. If your
+project wants community fork PRs to control the review Blueprint, opt in
+explicitly:
+
+```yaml
+    blueprint-override-allow-forks: true
+```
+
+Then add a collapsed details block to the PR description:
+
+````md
+<details>
+<summary>Playground Blueprint</summary>
+
+```json
+{
+  "landingPage": "/wp-admin/admin.php?page=my-plugin",
+  "siteOptions": {
+    "blogname": "Review this checkout flow"
+  },
+  "appendSteps": [
+    {
+      "step": "runPHP",
+      "code": "<?php require '/wordpress/wp-load.php'; update_option('my_plugin_mode', 'checkout');"
+    }
+  ]
+}
+```
+
+</details>
+````
+
+The override is merged into the generated Blueprint. `landingPage` and most
+top-level Blueprint fields replace the base value, `features` and `siteOptions`
+are merged, `prependSteps` run before the base steps, and `appendSteps` run
+afterwards. Raw `steps` are rejected so the override cannot accidentally remove
+the plugin or theme installation step. `preferredVersions` and
+`phpExtensionBundles` stay controlled by the workflow.
+
+Trade-off: the override is parsed from Markdown, so malformed JSON fails the
+preview action until the PR description is fixed. That is intentional: a broken
+review environment should be visible instead of silently falling back to a
+different setup.
+
 ### Custom blueprint (companion plugins, version pin, seed data, login)
 
 When you need more than "install this plugin," provide a full Blueprint via `blueprint:`. Example: install your plugin from the PR, also install WooCommerce from .org, pin PHP and WP versions, and log in as admin.
@@ -626,6 +684,9 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | `theme-path` | one of four† | — | Path to theme directory. Auto-generates a `git:directory` blueprint. |
 | `blueprint` | one of four† | — | Custom Blueprint as a JSON string. When set, `plugin-path` and `theme-path` are ignored. |
 | `blueprint-url` | one of four† | — | URL pointing to a hosted Blueprint JSON. Used directly via `?blueprint-url=…`. |
+| `blueprint-override-source` | no | `none` | Set to `pr-description` to merge a PR description details-block override into the generated Blueprint. |
+| `blueprint-override-summary` | no | `Playground Blueprint` | Exact `<summary>` text identifying the override details block. |
+| `blueprint-override-allow-forks` | no | `false` | Set to `true` to allow PR-description Blueprint overrides on pull requests from forks. |
 | `description-template` | no | `{{PLAYGROUND_BUTTON}}` | Template for the PR description block. Supports the [template variables](#template-variables). |
 | `comment-template` | no | (full default) | Template for the PR comment. Supports the [template variables](#template-variables). |
 | `restore-button-if-removed` | no | `true` | If the PR author removes the button block, restore it on the next run. Set `false` to respect deletions. Only applies to `append-to-description` mode. |

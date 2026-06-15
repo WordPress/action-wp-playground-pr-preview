@@ -1,5 +1,6 @@
 const core = require('@actions/core');
 const githubLib = require('@actions/github');
+const { findPrDescriptionBlueprintOverride } = require('./pr-description-blueprint-override');
 
 (async () => {
   const context = githubLib.context;
@@ -59,6 +60,9 @@ const githubLib = require('@actions/github');
   const headRef = pr.head.ref;
   const headSha = pr.head.sha;
   const baseRef = pr.base.ref;
+  const headRepoFullName = pr.head.repo && pr.head.repo.full_name;
+  const baseRepoFullName = pr.base.repo && pr.base.repo.full_name;
+  const isForkPullRequest = !headRepoFullName || !baseRepoFullName || headRepoFullName !== baseRepoFullName;
 
   const playgroundHostRaw = core.getInput('playground-host', {required: false}) || 'https://playground.wordpress.net';
   const playgroundHost = playgroundHostRaw.replace(/\/+$/, '');
@@ -67,9 +71,15 @@ const githubLib = require('@actions/github');
   const themePath = (core.getInput('theme-path', {required: false}) || '').trim();
   const blueprintInput = core.getInput('blueprint', {required: false}) || '';
   const blueprintUrlInput = (core.getInput('blueprint-url', {required: false}) || '').trim();
+  const blueprintOverrideSource = (core.getInput('blueprint-override-source', {required: false}) || 'none').trim().toLowerCase();
+  const blueprintOverrideSummary = (core.getInput('blueprint-override-summary', {required: false}) || 'Playground Blueprint').trim();
+  const blueprintOverrideAllowForks = (core.getInput('blueprint-override-allow-forks', {required: false}) || 'false').trim().toLowerCase() === 'true';
 
   if(!pluginPath && !themePath && !blueprintInput && !blueprintUrlInput) {
     throw new Error('One of `plugin-path`, `theme-path`, `blueprint`, or `blueprint-url` inputs is required.');
+  }
+  if (blueprintOverrideSource !== 'none' && blueprintOverrideSource !== 'pr-description') {
+    throw new Error(`Invalid blueprint-override-source: ${blueprintOverrideSource}. Accepted values: none, pr-description.`);
   }
 
   const descriptionTemplateInput = core.getInput('description-template', {required: false}) || '';
@@ -88,6 +98,56 @@ const githubLib = require('@actions/github');
     } catch (error) {
   	throw new Error(`Unable to parse ${label} as JSON. ${error.message}`);
     }
+  };
+
+  const mergeBlueprintOverride = (baseBlueprintJson, overrideJson) => {
+    const base = safeParseJson('base blueprint', baseBlueprintJson);
+    const override = safeParseJson('PR description Blueprint override', overrideJson);
+    const protectedFields = ['preferredVersions', 'phpExtensionBundles'];
+
+    for (const field of protectedFields) {
+      if (Object.prototype.hasOwnProperty.call(override, field)) {
+        delete override[field];
+        core.warning(`Ignoring protected Blueprint override field: ${field}`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(override, 'steps')) {
+      throw new Error('PR description Blueprint overrides must use prependSteps or appendSteps instead of steps.');
+    }
+
+    const prependSteps = Array.isArray(override.prependSteps) ? override.prependSteps : [];
+    const appendSteps = Array.isArray(override.appendSteps) ? override.appendSteps : [];
+    delete override.prependSteps;
+    delete override.appendSteps;
+
+    const siteOptions = override.siteOptions;
+    delete override.siteOptions;
+
+    const merged = {
+      ...base,
+      ...override,
+      features: {
+        ...(base.features || {}),
+        ...(override.features || {}),
+      },
+    };
+
+    const steps = Array.isArray(base.steps) ? [...base.steps] : [];
+    if (siteOptions && typeof siteOptions === 'object' && !Array.isArray(siteOptions)) {
+      const siteOptionsStep = steps.find((step) => step && step.step === 'setSiteOptions');
+      if (siteOptionsStep) {
+        siteOptionsStep.options = {
+          ...(siteOptionsStep.options || {}),
+          ...siteOptions,
+        };
+      } else {
+        steps.unshift({ step: 'setSiteOptions', options: siteOptions });
+      }
+    }
+
+    merged.steps = [...prependSteps, ...steps, ...appendSteps];
+    return JSON.stringify(merged);
   };
 
   const archiveBranchSegment = headRef.replace(/[^0-9A-Za-z]/g, '-');
@@ -173,6 +233,21 @@ const githubLib = require('@actions/github');
     blueprintJson = blueprintInput.trim();
   } else if (pluginPath || themePath) {
     blueprintJson = buildAutoBlueprint();
+  }
+
+  if (blueprintOverrideSource === 'pr-description') {
+    if (isForkPullRequest && !blueprintOverrideAllowForks) {
+      core.info('Skipping PR description Blueprint override because this pull request comes from a fork and blueprint-override-allow-forks is false.');
+    } else {
+      if (!blueprintJson) {
+        throw new Error('blueprint-override-source: pr-description requires an inline Blueprint; blueprint-url cannot be merged.');
+      }
+      const overrideJson = findPrDescriptionBlueprintOverride(pr.body || '', blueprintOverrideSummary);
+      if (overrideJson) {
+        blueprintJson = mergeBlueprintOverride(blueprintJson, overrideJson);
+        core.info(`Merged Blueprint override from PR description details block: ${blueprintOverrideSummary}`);
+      }
+    }
   }
 
   if (blueprintJson) {
