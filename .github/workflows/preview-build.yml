@@ -36,8 +36,23 @@ on:
         required: false
         type: string
         default: ''
+      node-version-file:
+        description: 'If set, pass node-version-file to actions/setup-node before the build.'
+        required: false
+        type: string
+        default: ''
+      node-cache:
+        description: 'If set, pass cache to actions/setup-node before the build, for example npm.'
+        required: false
+        type: string
+        default: ''
       php-version:
         description: 'If set, run shivammathur/setup-php before the build.'
+        required: false
+        type: string
+        default: ''
+      php-tools:
+        description: 'If set, pass tools to shivammathur/setup-php before the build, for example wp-cli.'
         required: false
         type: string
         default: ''
@@ -73,15 +88,18 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ inputs.fetch-depth }}
 
-      - if: ${{ inputs.node-version != '' }}
+      - if: ${{ inputs.node-version != '' || inputs.node-version-file != '' }}
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ inputs.node-version }}
+          node-version-file: ${{ inputs.node-version-file }}
+          cache: ${{ inputs.node-cache }}
 
       - if: ${{ inputs.php-version != '' }}
         uses: shivammathur/setup-php@728c6c6b8cf02c2e48117716a91ee48313958a19 # v2
         with:
           php-version: ${{ inputs.php-version }}
+          tools: ${{ inputs.php-tools }}
 
       - name: Run build command
         working-directory: ${{ inputs.working-directory }}
