@@ -209,6 +209,80 @@ Use this when a PR should preview a plugin and a theme from the same repository.
     github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+### Multiple preview variants
+
+Use this when reviewers need more than one Playground link for the same PR: a
+PHP support range, a WordPress version check, or a feature flag setup. The
+short syntax covers common version and feature toggles:
+
+```yaml
+- uses: WordPress/action-wp-playground-pr-preview@v3
+  with:
+    plugin-path: .
+    preview-variants: '["php:8.4", "php:8.2", "wp:6.8", "features:networking"]'
+    mode: comment
+    comment-template: |
+      ### WordPress Playground Preview
+
+      Test this PR with:
+
+      {{PLAYGROUND_URLS_MARKDOWN}}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Supported string shorthands are:
+
+- `php:<version>` — sets `preferredVersions.php`
+- `wp:<version>` or `wordpress:<version>` — sets `preferredVersions.wp`
+- `feature:<name>` or `features:<name>[,<name>]` — enables one or more
+  Blueprint `features`
+
+For combined or scenario-specific previews, use objects. `php` and `wp` are
+short aliases for `preferredVersions`, while other fields are merged into the
+base Blueprint:
+
+```yaml
+preview-variants: |
+  [
+    {
+      "label": "PHP 8.4 / WordPress latest",
+      "php": "8.4",
+      "wp": "latest"
+    },
+    {
+      "label": "Checkout flow with networking",
+      "php": "8.2",
+      "features": { "networking": true },
+      "landingPage": "/wp-admin/admin.php?page=my-plugin",
+      "siteOptions": {
+        "blogname": "Checkout review"
+      },
+      "appendSteps": [
+        {
+          "step": "runPHP",
+          "code": "<?php require '/wordpress/wp-load.php'; update_option('my_plugin_mode', 'checkout');"
+        }
+      ]
+    }
+  ]
+```
+
+Variant objects keep the generated plugin/theme install steps by default.
+`preferredVersions`, `features`, and `siteOptions` merge with the base
+Blueprint; `prependSteps` run before the base steps; `appendSteps` run after the
+base steps. Raw `steps` are rejected so a variant does not accidentally remove
+the install step. If you need the unchanged default preview alongside variants,
+include `{ "label": "Default" }` as one of the entries.
+
+Existing one-button workflows keep working: `{{PLAYGROUND_BUTTON}}` and the
+`preview-url` output point to the first generated preview. Use
+`{{PLAYGROUND_URLS_MARKDOWN}}` or `preview-urls-json` when you want to show the
+full list.
+
+Trade-off: `preview-variants` does not work with `blueprint-url`, because the
+action cannot safely rewrite a remote Blueprint once per variant. Use
+`plugin-path`, `theme-path`, or inline `blueprint` when you need variants.
+
 ### Custom blueprint (companion plugins, version pin, seed data, login)
 
 When you need more than "install this plugin," provide a full Blueprint via `blueprint:`. Example: install your plugin from the PR, also install WooCommerce from .org, pin PHP and WP versions, and log in as admin.
@@ -626,6 +700,7 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | `theme-path` | one of four† | — | Path to theme directory. Auto-generates a `git:directory` blueprint. |
 | `blueprint` | one of four† | — | Custom Blueprint as a JSON string. When set, `plugin-path` and `theme-path` are ignored. |
 | `blueprint-url` | one of four† | — | URL pointing to a hosted Blueprint JSON. Used directly via `?blueprint-url=…`. |
+| `preview-variants` | no | — | JSON array of preview variants. String shorthands support `php:<version>`, `wp:<version>`, and `features:<name>[,<name>]`; object entries merge Blueprint fields into the base preview. Not supported with `blueprint-url`. |
 | `description-template` | no | `{{PLAYGROUND_BUTTON}}` | Template for the PR description block. Supports the [template variables](#template-variables). |
 | `comment-template` | no | (full default) | Template for the PR comment. Supports the [template variables](#template-variables). |
 | `restore-button-if-removed` | no | `true` | If the PR author removes the button block, restore it on the next run. Set `false` to respect deletions. Only applies to `append-to-description` mode. |
@@ -638,8 +713,9 @@ Use directly when there's no build step, or have the publish workflow call it (i
 
 | Output | Description |
 |---|---|
-| `preview-url` | Full Playground URL embedded in the button. |
-| `blueprint-json` | Rendered Blueprint JSON string. Empty when `blueprint-url` is used. |
+| `preview-url` | Full Playground URL embedded in the button. When variants are configured, this is the first generated preview. |
+| `preview-urls-json` | JSON array of generated preview links, each with `label` and `url`. |
+| `blueprint-json` | Rendered Blueprint JSON string. Empty when `blueprint-url` is used. When variants are configured, this is the first generated Blueprint. |
 | `rendered-description` | Markdown/HTML inserted into the PR description (when `mode: append-to-description`). |
 | `rendered-comment` | Markdown/HTML used for the PR comment (when `mode: comment`). |
 | `mode` | Effective mode (`append-to-description` or `comment`). |
@@ -695,7 +771,9 @@ Available in `description-template` and `comment-template` strings (case-insensi
 | Variable | Value |
 |---|---|
 | `PLAYGROUND_BUTTON` | Full button HTML — recommended in any custom template. |
-| `PLAYGROUND_URL` | Full Playground URL with embedded blueprint. |
+| `PLAYGROUND_URL` | Full Playground URL with embedded blueprint. When variants are configured, this is the first generated preview. |
+| `PLAYGROUND_URLS_MARKDOWN` | Markdown list of all generated preview links. |
+| `PLAYGROUND_URLS_JSON` | JSON array of generated preview links, each with `label` and `url`. |
 | `PLAYGROUND_BUTTON_IMAGE_URL` | URL of the button image asset. |
 | `PLAYGROUND_BLUEPRINT_JSON` | Stringified Blueprint JSON. Empty when `blueprint-url` is used. |
 | `PLAYGROUND_BLUEPRINT_DATA_URL` | Blueprint data URL, or the provided `blueprint-url` when `blueprint-url` is used. |
