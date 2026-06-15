@@ -125,6 +125,8 @@ on:
   workflow_run:
     workflows: ["PR Preview - Build"]
     types: [completed]
+  pull_request_target:
+    types: [edited]
 
 permissions:
   contents: write
@@ -144,7 +146,7 @@ jobs:
 
 You do not need to create `secrets.GITHUB_TOKEN`; GitHub provides it automatically to each workflow run.
 
-Open a pull request. The build workflow runs `npm ci && npm run build:plugin-zip`. After that succeeds, the publish workflow uploads the resulting ZIP to a public release URL and posts the Preview button. When someone clicks it, Playground installs and activates the built plugin.
+Open a pull request. The build workflow runs `npm ci && npm run build:plugin-zip`. After that succeeds, the publish workflow uploads the resulting ZIP to a public release URL and posts the Preview button. When someone clicks it, Playground installs and activates the built plugin. If the publish workflow also listens to `pull_request_target: edited`, editing the PR description refreshes the existing preview button/comment against the latest published artifact for the current PR head.
 
 Expected result:
 
@@ -579,8 +581,9 @@ splits the work at the artifact boundary:
 The publish workflow has a runtime guard that **fails loudly** if invoked from
 any trigger other than `workflow_run`. Non-PR source runs and failed build runs
 skip intentionally because there is no successful PR preview to publish.
-Misconfigured callers (for example someone reaches for `pull_request_target`)
-get a red failure instead of a silent skip.
+Misconfigured callers get a red failure instead of a silent skip. The one
+exception is `pull_request_target` for PR description edits, which may refresh
+an already-published preview without rebuilding or reading PR code.
 
 Because the publish workflow is privileged, its third-party action references
 are pinned to commit SHAs. This avoids granting write permissions to a moved
