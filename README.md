@@ -466,6 +466,28 @@ jobs:
 
 The important connection is the artifact name. `artifacts: my-plugin=...` in the build workflow creates an artifact URL placeholder named `{{ARTIFACT_URL:my-plugin}}` for the publish workflow. Use that placeholder anywhere a Blueprint needs the public ZIP URL.
 
+### Link to normal and seamless Playground modes
+
+The action always computes both the default Playground URL and a seamless-mode
+URL. Use `{{PLAYGROUND_URL_SEAMLESS}}` in a custom template when reviewers
+should be able to choose either presentation.
+
+```yaml
+- uses: WordPress/action-wp-playground-pr-preview@v3
+  with:
+    plugin-path: .
+    mode: comment
+    comment-template: |
+      ### WordPress Playground Preview
+
+      - [Normal Playground]({{PLAYGROUND_URL}})
+      - [Seamless Playground]({{PLAYGROUND_URL_SEAMLESS}})
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+The default `{{PLAYGROUND_BUTTON}}` still points at `{{PLAYGROUND_URL}}`, so
+existing workflows are unchanged.
+
 ### Post the button as a comment instead of editing the description
 
 ```yaml
@@ -639,6 +661,7 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | Output | Description |
 |---|---|
 | `preview-url` | Full Playground URL embedded in the button. |
+| `seamless-preview-url` | Full Playground URL in seamless mode. |
 | `blueprint-json` | Rendered Blueprint JSON string. Empty when `blueprint-url` is used. |
 | `rendered-description` | Markdown/HTML inserted into the PR description (when `mode: append-to-description`). |
 | `rendered-comment` | Markdown/HTML used for the PR comment (when `mode: comment`). |
@@ -696,6 +719,7 @@ Available in `description-template` and `comment-template` strings (case-insensi
 |---|---|
 | `PLAYGROUND_BUTTON` | Full button HTML — recommended in any custom template. |
 | `PLAYGROUND_URL` | Full Playground URL with embedded blueprint. |
+| `PLAYGROUND_URL_SEAMLESS` | Full Playground URL with `mode=seamless`. |
 | `PLAYGROUND_BUTTON_IMAGE_URL` | URL of the button image asset. |
 | `PLAYGROUND_BLUEPRINT_JSON` | Stringified Blueprint JSON. Empty when `blueprint-url` is used. |
 | `PLAYGROUND_BLUEPRINT_DATA_URL` | Blueprint data URL, or the provided `blueprint-url` when `blueprint-url` is used. |
