@@ -9,6 +9,7 @@ const exposeArtifactAction = readFileSync(
   new URL('../.github/actions/expose-artifact-on-public-url/action.yml', import.meta.url),
   'utf8'
 );
+const action = readFileSync(new URL('../action.yml', import.meta.url), 'utf8');
 const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
 
 test('wrong-trigger misuse fails in the guard step, not at job level', () => {
@@ -76,6 +77,17 @@ test('cleanup sorts release assets by the GitHub CLI createdAt field', () => {
   assert.match(publishWorkflow, /createdAt/);
   assert.doesNotMatch(exposeArtifactAction, /created_at/);
   assert.match(exposeArtifactAction, /createdAt/);
+});
+
+test('preview variants are documented as a general matrix feature', () => {
+  assert.match(action, /preview-variants:/);
+  assert.match(action, /preview-urls-json:/);
+  assert.doesNotMatch(action, /php-versions:/);
+  assert.match(readme, /Multiple preview variants/);
+  assert.match(readme, /php:<version>/);
+  assert.match(readme, /wp:<version>/);
+  assert.match(readme, /features:<name>/);
+  assert.match(readme, /PLAYGROUND_URLS_MARKDOWN/);
 });
 
 function test(name, fn) {

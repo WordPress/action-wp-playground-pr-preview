@@ -67,6 +67,7 @@ const githubLib = require('@actions/github');
   const themePath = (core.getInput('theme-path', {required: false}) || '').trim();
   const blueprintInput = core.getInput('blueprint', {required: false}) || '';
   const blueprintUrlInput = (core.getInput('blueprint-url', {required: false}) || '').trim();
+  const previewVariantsInput = core.getInput('preview-variants', {required: false}) || '';
 
   if(!pluginPath && !themePath && !blueprintInput && !blueprintUrlInput) {
     throw new Error('One of `plugin-path`, `theme-path`, `blueprint`, or `blueprint-url` inputs is required.');
@@ -88,6 +89,136 @@ const githubLib = require('@actions/github');
     } catch (error) {
   	throw new Error(`Unable to parse ${label} as JSON. ${error.message}`);
     }
+  };
+
+  const parsePreviewVariantString = (value) => {
+    const separator = value.indexOf(':');
+    if (separator === -1) {
+      throw new Error(`Invalid preview variant shorthand: ${value}. Expected php:<version>, wp:<version>, or features:<name>[,<name>].`);
+    }
+
+    const kind = value.slice(0, separator).trim().toLowerCase();
+    const rawValue = value.slice(separator + 1).trim();
+    if (!rawValue) {
+      throw new Error(`Invalid preview variant shorthand: ${value}. The value after ':' must not be empty.`);
+    }
+
+    if (kind === 'php') {
+      return { label: `PHP ${rawValue}`, preferredVersions: { php: rawValue } };
+    }
+    if (kind === 'wp' || kind === 'wordpress') {
+      return { label: `WordPress ${rawValue}`, preferredVersions: { wp: rawValue } };
+    }
+    if (kind === 'feature' || kind === 'features') {
+      const features = rawValue.split(',').map((feature) => feature.trim()).filter(Boolean);
+      if (!features.length) {
+        throw new Error(`Invalid preview variant shorthand: ${value}. At least one feature name is required.`);
+      }
+      return {
+        label: features.length === 1 ? `Feature: ${features[0]}` : `Features: ${features.join(', ')}`,
+        features: Object.fromEntries(features.map((feature) => [feature, true]))
+      };
+    }
+
+    throw new Error(`Invalid preview variant shorthand: ${value}. Expected php:<version>, wp:<version>, or features:<name>[,<name>].`);
+  };
+
+  const normalizePreviewVariant = (entry, index) => {
+    if (typeof entry === 'string') {
+      return parsePreviewVariantString(entry.trim());
+    }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`preview-variants[${index}] must be a string shorthand or an object.`);
+    }
+
+    const { label, php, wp, wordpress, ...blueprintPatch } = entry;
+    const preferredVersions = { ...(blueprintPatch.preferredVersions || {}) };
+    if (php !== undefined) {
+      preferredVersions.php = String(php);
+    }
+    if (wp !== undefined || wordpress !== undefined) {
+      preferredVersions.wp = String(wp !== undefined ? wp : wordpress);
+    }
+    if (Object.keys(preferredVersions).length) {
+      blueprintPatch.preferredVersions = preferredVersions;
+    }
+
+    return {
+      label: typeof label === 'string' && label.trim() ? label.trim() : '',
+      ...blueprintPatch
+    };
+  };
+
+  const parsePreviewVariants = (input) => {
+    const variants = safeParseJson('preview-variants', input, []);
+    if (!Array.isArray(variants)) {
+      throw new Error('preview-variants must be a JSON array.');
+    }
+    return variants.map(normalizePreviewVariant);
+  };
+
+  const describePreviewVariant = (variant, index) => {
+    if (variant.label) {
+      return variant.label;
+    }
+
+    const parts = [];
+    if (variant.preferredVersions && variant.preferredVersions.php) {
+      parts.push(`PHP ${variant.preferredVersions.php}`);
+    }
+    if (variant.preferredVersions && variant.preferredVersions.wp) {
+      parts.push(`WordPress ${variant.preferredVersions.wp}`);
+    }
+    if (variant.features && Object.keys(variant.features).length) {
+      parts.push(`Features: ${Object.keys(variant.features).join(', ')}`);
+    }
+    return parts.length ? parts.join(' / ') : `Preview ${index + 1}`;
+  };
+
+  const mergeBlueprintVariant = (baseBlueprintJson, variant, index) => {
+    const base = safeParseJson('base blueprint', baseBlueprintJson);
+    const { label, prependSteps, appendSteps, siteOptions, ...override } = variant;
+
+    if (Object.prototype.hasOwnProperty.call(override, 'steps')) {
+      throw new Error('preview-variants entries must use prependSteps or appendSteps instead of steps.');
+    }
+
+    const merged = {
+      ...base,
+      ...override,
+      preferredVersions: {
+        ...(base.preferredVersions || {}),
+        ...(override.preferredVersions || {}),
+      },
+      features: {
+        ...(base.features || {}),
+        ...(override.features || {}),
+      },
+    };
+
+    const steps = Array.isArray(base.steps) ? [...base.steps] : [];
+    if (siteOptions && typeof siteOptions === 'object' && !Array.isArray(siteOptions)) {
+      const siteOptionsStep = steps.find((step) => step && step.step === 'setSiteOptions');
+      if (siteOptionsStep) {
+        siteOptionsStep.options = {
+          ...(siteOptionsStep.options || {}),
+          ...siteOptions,
+        };
+      } else {
+        steps.unshift({ step: 'setSiteOptions', options: siteOptions });
+      }
+    }
+
+    merged.steps = [
+      ...(Array.isArray(prependSteps) ? prependSteps : []),
+      ...steps,
+      ...(Array.isArray(appendSteps) ? appendSteps : [])
+    ];
+
+    return {
+      label: describePreviewVariant({ label, ...override, siteOptions }, index),
+      blueprintJson: JSON.stringify(merged)
+    };
   };
 
   const archiveBranchSegment = headRef.replace(/[^0-9A-Za-z]/g, '-');
@@ -175,6 +306,16 @@ const githubLib = require('@actions/github');
     blueprintJson = buildAutoBlueprint();
   }
 
+  const previewVariants = parsePreviewVariants(previewVariantsInput);
+  if (previewVariants.length && blueprintUrlInput) {
+    throw new Error('preview-variants requires an inline Blueprint; blueprint-url cannot be rewritten per variant.');
+  }
+
+  const previewBlueprints = previewVariants.length
+    ? previewVariants.map((variant, index) => mergeBlueprintVariant(blueprintJson, variant, index))
+    : [{ label: 'Preview', blueprintJson }];
+  blueprintJson = previewBlueprints[0] ? previewBlueprints[0].blueprintJson : blueprintJson;
+
   if (blueprintJson) {
     try {
       JSON.parse(blueprintJson);
@@ -206,7 +347,7 @@ const githubLib = require('@actions/github');
 
   	// Escape HTML entities somewhat naively to prevent the values leaking
   	// into HTML syntax elements.
-	  if (upperKey !== 'PLAYGROUND_BUTTON') {
+	  if (upperKey !== 'PLAYGROUND_BUTTON' && upperKey !== 'PLAYGROUND_URLS_MARKDOWN') {
   	  value = value
   		.replace(/&/g, '&amp;')
   		.replace(/</g, '&lt;')
@@ -218,14 +359,29 @@ const githubLib = require('@actions/github');
     });
   };
 
-  const blueprintDataUrl = blueprintJson
-    ? `data:application/json,${encodeURIComponent(blueprintJson)}`
-    : '';
-  const finalBlueprintUrl = blueprintUrlInput || blueprintDataUrl;
-  const blueprintQueryValue = blueprintUrlInput
-    ? encodeURIComponent(blueprintUrlInput)
-    : blueprintDataUrl;
-  const previewUrl = `${playgroundHost}${playgroundHost.includes('?') ? '&' : '?'}blueprint-url=${blueprintQueryValue}`;
+  const buildPreviewUrl = (previewBlueprintJson) => {
+    const blueprintDataUrl = previewBlueprintJson
+      ? `data:application/json,${encodeURIComponent(previewBlueprintJson)}`
+      : '';
+    const finalBlueprintUrl = blueprintUrlInput || blueprintDataUrl;
+    const blueprintQueryValue = blueprintUrlInput
+      ? encodeURIComponent(blueprintUrlInput)
+      : blueprintDataUrl;
+
+    return {
+      url: `${playgroundHost}${playgroundHost.includes('?') ? '&' : '?'}blueprint-url=${blueprintQueryValue}`,
+      blueprintDataUrl: finalBlueprintUrl
+    };
+  };
+
+  const previewLinks = previewBlueprints.map((preview) => {
+    const { url, blueprintDataUrl } = buildPreviewUrl(preview.blueprintJson);
+    return { ...preview, url, blueprintDataUrl };
+  });
+  const firstPreview = previewLinks[0];
+  const previewUrl = firstPreview.url;
+  const previewUrlsJson = JSON.stringify(previewLinks.map(({ label, url }) => ({ label, url })));
+  const previewUrlsMarkdown = previewLinks.map(({ label, url }) => `- [${label}](${url})`).join('\n');
 
   const joinWithNewline = (segments) => segments.join('\n');
   const defaultButtonImageUrl = 'https://raw.githubusercontent.com/adamziel/playground-preview/refs/heads/trunk/assets/playground-preview-button.svg';
@@ -270,8 +426,10 @@ const githubLib = require('@actions/github');
     baseTemplateVars,
     {
   	PLAYGROUND_URL: previewUrl,
+    PLAYGROUND_URLS_JSON: previewUrlsJson,
+    PLAYGROUND_URLS_MARKDOWN: previewUrlsMarkdown,
   	PLAYGROUND_BLUEPRINT_JSON: blueprintJson,
-  	PLAYGROUND_BLUEPRINT_DATA_URL: finalBlueprintUrl,
+    PLAYGROUND_BLUEPRINT_DATA_URL: firstPreview.blueprintDataUrl,
   	PLAYGROUND_BUTTON_IMAGE_URL: defaultButtonImageUrl,
   	PLAYGROUND_BUTTON: substitute(defaultButtonTemplate, {})
     }
@@ -407,6 +565,7 @@ const githubLib = require('@actions/github');
 
   core.setOutput('mode', mode);
   core.setOutput('preview-url', previewUrl);
+  core.setOutput('preview-urls-json', previewUrlsJson);
   core.setOutput('blueprint-json', blueprintJson);
   core.setOutput('rendered-description', renderedDescription);
   core.setOutput('rendered-comment', renderedComment);
