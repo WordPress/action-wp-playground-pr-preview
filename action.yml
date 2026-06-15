@@ -55,6 +55,8 @@ runs:
 outputs:
   preview-url:
     description: Direct link to the generated WordPress Playground instance.
+  seamless-preview-url:
+    description: Direct link to the generated WordPress Playground instance in seamless mode.
   blueprint-json:
     description: JSON blueprint (stringified) used for the preview.
   rendered-description:

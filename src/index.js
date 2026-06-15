@@ -225,7 +225,10 @@ const githubLib = require('@actions/github');
   const blueprintQueryValue = blueprintUrlInput
     ? encodeURIComponent(blueprintUrlInput)
     : blueprintDataUrl;
-  const previewUrl = `${playgroundHost}${playgroundHost.includes('?') ? '&' : '?'}blueprint-url=${blueprintQueryValue}`;
+  const withPlaygroundQuery = (query) =>
+    `${playgroundHost}${playgroundHost.includes('?') ? '&' : '?'}${query}`;
+  const previewUrl = withPlaygroundQuery(`blueprint-url=${blueprintQueryValue}`);
+  const seamlessPreviewUrl = withPlaygroundQuery(`mode=seamless&blueprint-url=${blueprintQueryValue}`);
 
   const joinWithNewline = (segments) => segments.join('\n');
   const defaultButtonImageUrl = 'https://raw.githubusercontent.com/adamziel/playground-preview/refs/heads/trunk/assets/playground-preview-button.svg';
@@ -407,6 +410,7 @@ const githubLib = require('@actions/github');
 
   core.setOutput('mode', mode);
   core.setOutput('preview-url', previewUrl);
+  core.setOutput('seamless-preview-url', seamlessPreviewUrl);
   core.setOutput('blueprint-json', blueprintJson);
   core.setOutput('rendered-description', renderedDescription);
   core.setOutput('rendered-comment', renderedComment);
