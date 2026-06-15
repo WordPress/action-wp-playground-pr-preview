@@ -3,9 +3,10 @@ name: WordPress Playground Preview - Publish (reusable)
 # Reusable workflow that publishes a built artifact bundle from
 # `preview-build.yml` to a public release and posts the Preview button.
 #
-# MUST be invoked from a `workflow_run` trigger so it can run with
+# Normally invoked from a `workflow_run` trigger so it can run with
 # `contents: write` + `pull-requests: write` even when the originating PR
-# came from a fork. Any other trigger is rejected at runtime.
+# came from a fork. It may also be invoked from `pull_request_target` `edited`
+# to refresh the already-published preview after PR description changes.
 
 on:
   workflow_call:
@@ -74,8 +75,12 @@ jobs:
           WORKFLOW_RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
           set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
+            echo "Refreshing the existing Playground preview for a PR description edit."
+            exit 0
+          fi
           if [ "$EVENT_NAME" != "workflow_run" ]; then
-            echo "::error::preview-publish.yml must be invoked from a workflow_run trigger." >&2
+            echo "::error::preview-publish.yml must be invoked from workflow_run, or pull_request_target for PR description edits." >&2
             exit 1
           fi
           if [ "$WORKFLOW_RUN_EVENT" != "pull_request" ]; then
@@ -126,6 +131,17 @@ jobs:
           SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
         with:
           script: |
+            if (context.eventName === 'pull_request_target') {
+              const pr = context.payload.pull_request;
+              if (!pr) {
+                throw new Error('pull_request_target refresh requires a pull_request payload.');
+              }
+              core.setOutput('pr-number', String(pr.number));
+              core.setOutput('commit-sha', pr.head.sha);
+              core.setOutput('refresh-only', 'true');
+              return;
+            }
+
             const runId = Number(process.env.SOURCE_RUN_ID);
             const list = await github.rest.actions.listWorkflowRunArtifacts({
               owner: context.repo.owner,
@@ -165,9 +181,10 @@ jobs:
             core.setOutput('artifact-name', a.name);
             core.setOutput('pr-number', prNumber);
             core.setOutput('commit-sha', commitSha);
+            core.setOutput('refresh-only', 'false');
 
       - name: Download artifact bundle
-        if: env.SKIP != '1'
+        if: env.SKIP != '1' && steps.meta.outputs.refresh-only != 'true'
         shell: bash
         env:
           ARTIFACT_ID: ${{ steps.meta.outputs.artifact-id }}
@@ -180,7 +197,7 @@ jobs:
           ls -R bundle
 
       - name: Ensure release exists
-        if: env.SKIP != '1'
+        if: env.SKIP != '1' && steps.meta.outputs.refresh-only != 'true'
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -199,7 +216,7 @@ jobs:
 
       - name: Upload zips and resolve URLs
         id: urls
-        if: env.SKIP != '1'
+        if: env.SKIP != '1' && steps.meta.outputs.refresh-only != 'true'
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.release-tag }}
@@ -230,6 +247,65 @@ jobs:
           echo "first-name=$(node -e 'const j=require(process.argv[1]);console.log(Object.keys(j)[0]||"")' "$mapping_file")" >> "$GITHUB_OUTPUT"
           echo "count=$(node -e 'console.log(Object.keys(require(process.argv[1])).length)' "$mapping_file")" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve existing release asset URLs
+        id: existing-urls
+        if: env.SKIP != '1' && steps.meta.outputs.refresh-only == 'true'
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release-tag }}
+          PR_NUMBER: ${{ steps.meta.outputs.pr-number }}
+          COMMIT_SHA: ${{ steps.meta.outputs.commit-sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mapping_file="$RUNNER_TEMP/artifact-urls.json"
+          echo '{}' > "$mapping_file"
+          prefix="pr-${PR_NUMBER}-${COMMIT_SHA}-"
+          suffix=".zip"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[].name' > release-assets.txt || true
+          while IFS= read -r asset; do
+            case "$asset" in
+              "$prefix"*"$suffix") ;;
+              *) continue ;;
+            esac
+            name="${asset#"$prefix"}"
+            name="${name%"$suffix"}"
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${asset}"
+            node -e '
+              const fs = require("fs");
+              const f = process.argv[1], k = process.argv[2], v = process.argv[3];
+              const j = JSON.parse(fs.readFileSync(f, "utf8"));
+              j[k] = v;
+              fs.writeFileSync(f, JSON.stringify(j));
+            ' "$mapping_file" "$name" "$url"
+          done < release-assets.txt
+          count="$(node -e 'console.log(Object.keys(require(process.argv[1])).length)' "$mapping_file")"
+          if [ "$count" -eq 0 ]; then
+            echo "No release assets found for PR #${PR_NUMBER} at ${COMMIT_SHA}; skipping refresh."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+          echo "mapping-file=$mapping_file" >> "$GITHUB_OUTPUT"
+          echo "first-name=$(node -e 'const j=require(process.argv[1]);console.log(Object.keys(j)[0]||"")' "$mapping_file")" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Select artifact URL mapping
+        id: url-meta
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          UPLOAD_MAPPING_FILE: ${{ steps.urls.outputs.mapping-file }}
+          UPLOAD_FIRST_NAME: ${{ steps.urls.outputs.first-name }}
+          UPLOAD_COUNT: ${{ steps.urls.outputs.count }}
+          EXISTING_MAPPING_FILE: ${{ steps.existing-urls.outputs.mapping-file }}
+          EXISTING_FIRST_NAME: ${{ steps.existing-urls.outputs.first-name }}
+          EXISTING_COUNT: ${{ steps.existing-urls.outputs.count }}
+        run: |
+          set -euo pipefail
+          echo "mapping-file=${UPLOAD_MAPPING_FILE:-$EXISTING_MAPPING_FILE}" >> "$GITHUB_OUTPUT"
+          echo "first-name=${UPLOAD_FIRST_NAME:-$EXISTING_FIRST_NAME}" >> "$GITHUB_OUTPUT"
+          echo "count=${UPLOAD_COUNT:-$EXISTING_COUNT}" >> "$GITHUB_OUTPUT"
+
       - name: Render blueprint
         id: blueprint
         if: env.SKIP != '1'
@@ -238,9 +314,9 @@ jobs:
           BLUEPRINT_INPUT: ${{ inputs.blueprint }}
           KIND: ${{ inputs.kind }}
           FROM_ARTIFACT: ${{ inputs.blueprint-from-artifact }}
-          MAPPING_FILE: ${{ steps.urls.outputs.mapping-file }}
-          FIRST_NAME: ${{ steps.urls.outputs.first-name }}
-          COUNT: ${{ steps.urls.outputs.count }}
+          MAPPING_FILE: ${{ steps.url-meta.outputs.mapping-file }}
+          FIRST_NAME: ${{ steps.url-meta.outputs.first-name }}
+          COUNT: ${{ steps.url-meta.outputs.count }}
         run: |
           set -euo pipefail
           node <<'NODE' >> "$GITHUB_OUTPUT"
@@ -295,7 +371,7 @@ jobs:
           NODE
 
       - name: Cleanup old artifacts
-        if: env.SKIP != '1'
+        if: env.SKIP != '1' && steps.meta.outputs.refresh-only != 'true'
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.release-tag }}
