@@ -515,6 +515,29 @@ Or for comment mode:
 
 Available template variables are listed under [Reference → Template variables](#template-variables).
 
+In the reusable publish workflow, the same template inputs are available on
+`preview-publish.yml`:
+
+```yaml
+jobs:
+  publish:
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    with:
+      kind: plugin
+      mode: comment
+      comment-template: |
+        ## Preview this PR
+
+        {{PLAYGROUND_BUTTON}}
+
+        Download the built plugin: {{ARTIFACT_URL_MY_PLUGIN}}
+```
+
+For reusable workflow templates, each artifact URL is exposed as
+`{{ARTIFACT_URL_<NAME>}}`, uppercased with non-alphanumeric characters replaced
+by underscores. An artifact named `my-plugin` becomes
+`{{ARTIFACT_URL_MY_PLUGIN}}`.
+
 ---
 
 ## Using an LLM to add this to your repository
@@ -621,6 +644,9 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `mode` | no | `append-to-description` | `append-to-description` or `comment`. |
+| `description-template` | no | — | Template passed through to the preview action for PR description mode. |
+| `comment-template` | no | — | Template passed through to the preview action for comment mode. |
+| `restore-button-if-removed` | no | `true` | Passed through to the preview action for PR description mode. |
 | `playground-host` | no | `https://playground.wordpress.net` | Base Playground host URL. |
 | `plugin-path` | one of four† | — | Path to plugin directory. `.` for repo root, `plugins/foo` for subdir. Auto-generates a `git:directory` blueprint. |
 | `theme-path` | one of four† | — | Path to theme directory. Auto-generates a `git:directory` blueprint. |
@@ -628,6 +654,7 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | `blueprint-url` | one of four† | — | URL pointing to a hosted Blueprint JSON. Used directly via `?blueprint-url=…`. |
 | `description-template` | no | `{{PLAYGROUND_BUTTON}}` | Template for the PR description block. Supports the [template variables](#template-variables). |
 | `comment-template` | no | (full default) | Template for the PR comment. Supports the [template variables](#template-variables). |
+| `template-variables` | no | — | JSON object with additional template variables. Keys are available as `{{KEY}}`. |
 | `restore-button-if-removed` | no | `true` | If the PR author removes the button block, restore it on the next run. Set `false` to respect deletions. Only applies to `append-to-description` mode. |
 | `pr-number` | no | *event payload* | Pull request number. Required when calling from a workflow that doesn't have a `pull_request` event payload (e.g. `workflow_run`). |
 | `github-token` | yes | — | Token with `pull-requests: write` and `contents: read`, usually `${{ secrets.GITHUB_TOKEN }}`. |
@@ -673,6 +700,9 @@ Runs in the privileged `workflow_run` context, exposes the artifact bundle's zip
 | `artifacts-to-keep` | no | `2` | Positive integer number of distinct PR commits worth of zips to keep on the release. Older zips for the same PR get pruned. Set to `keep-all` to disable cleanup. |
 | `release-tag` | no | `ci-artifacts` | Tag used to host artifacts publicly. Auto-created as a prerelease on first use. |
 | `mode` | no | `append-to-description` | `append-to-description` or `comment`. |
+| `description-template` | no | — | Template passed through to the preview action for PR description mode. |
+| `comment-template` | no | — | Template passed through to the preview action for comment mode. |
+| `restore-button-if-removed` | no | `true` | Passed through to the preview action for PR description mode. |
 
 ‡ Provide exactly one of `blueprint`, `kind`, `blueprint-from-artifact`. The publish workflow validates this and fails loudly if zero or two are set.
 
@@ -704,6 +734,8 @@ Available in `description-template` and `comment-template` strings (case-insensi
 | `REPO_OWNER`, `REPO_NAME`, `REPO_FULL_NAME`, `REPO_SLUG`, `REPO_ARCHIVE_ROOT` | Repository metadata. |
 | `PLUGIN_PATH`, `PLUGIN_SLUG` | Set when `plugin-path:` is provided. |
 | `THEME_PATH`, `THEME_SLUG` | Set when `theme-path:` is provided. |
+| `ARTIFACT_URL_<NAME>` | Reusable publish workflow only. Public URL for a named build artifact. |
+| `ARTIFACT_URLS_JSON` | Reusable publish workflow only. JSON object mapping artifact names to public URLs. |
 
 All variables except `PLAYGROUND_BUTTON` are HTML-escaped before substitution.
 

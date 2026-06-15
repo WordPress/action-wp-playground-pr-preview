@@ -74,6 +74,7 @@ const githubLib = require('@actions/github');
 
   const descriptionTemplateInput = core.getInput('description-template', {required: false}) || '';
   const commentTemplateInput = core.getInput('comment-template', {required: false}) || '';
+  const templateVariablesInput = core.getInput('template-variables', {required: false}) || '';
   const descriptionMarkerStart = '<!-- wp-playground-preview:start -->';
   const descriptionMarkerEnd = '<!-- wp-playground-preview:end -->';
   const commentIdentifier = '<!-- wp-playground-preview-comment -->';
@@ -89,6 +90,11 @@ const githubLib = require('@actions/github');
   	throw new Error(`Unable to parse ${label} as JSON. ${error.message}`);
     }
   };
+
+  const extraTemplateVariables = safeParseJson('template-variables', templateVariablesInput, {});
+  if (Array.isArray(extraTemplateVariables) || typeof extraTemplateVariables !== 'object') {
+    throw new Error('template-variables must be a JSON object.');
+  }
 
   const archiveBranchSegment = headRef.replace(/[^0-9A-Za-z]/g, '-');
   const repoArchiveRoot = `${repoName}-${archiveBranchSegment}`;
@@ -274,7 +280,8 @@ const githubLib = require('@actions/github');
   	PLAYGROUND_BLUEPRINT_DATA_URL: finalBlueprintUrl,
   	PLAYGROUND_BUTTON_IMAGE_URL: defaultButtonImageUrl,
   	PLAYGROUND_BUTTON: substitute(defaultButtonTemplate, {})
-    }
+    },
+    extraTemplateVariables
   );
 
   templateVariables.PLAYGROUND_BUTTON = substitute(defaultButtonTemplate, templateVariables);

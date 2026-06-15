@@ -53,6 +53,21 @@ on:
         required: false
         type: string
         default: 'append-to-description'
+      description-template:
+        description: 'Custom markdown/HTML template for PR descriptions. Passed through to the preview action.'
+        required: false
+        type: string
+        default: ''
+      comment-template:
+        description: 'Custom markdown/HTML template for PR comments. Passed through to the preview action.'
+        required: false
+        type: string
+        default: ''
+      restore-button-if-removed:
+        description: 'Whether to restore the preview button if removed by the PR author. Passed through to the preview action.'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -294,6 +309,26 @@ jobs:
             console.log('blueprint=' + JSON.stringify(JSON.parse(blueprint)));
           NODE
 
+      - name: Render artifact URL template variables
+        id: artifact-template-vars
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          MAPPING_FILE: ${{ steps.urls.outputs.mapping-file }}
+        run: |
+          set -euo pipefail
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+            const fs = require('fs');
+            const urls = JSON.parse(fs.readFileSync(process.env.MAPPING_FILE, 'utf8'));
+            const vars = {};
+            for (const [name, url] of Object.entries(urls)) {
+              const key = `ARTIFACT_URL_${name}`.replace(/[^0-9A-Za-z_]/g, '_').toUpperCase();
+              vars[key] = url;
+            }
+            vars.ARTIFACT_URLS_JSON = urls;
+            console.log('json=' + JSON.stringify(vars));
+          NODE
+
       - name: Cleanup old artifacts
         if: env.SKIP != '1'
         shell: bash
@@ -343,4 +378,8 @@ jobs:
           mode: ${{ inputs.mode }}
           blueprint: ${{ steps.blueprint.outputs.blueprint }}
           pr-number: ${{ steps.meta.outputs.pr-number }}
+          description-template: ${{ inputs.description-template }}
+          comment-template: ${{ inputs.comment-template }}
+          restore-button-if-removed: ${{ inputs.restore-button-if-removed }}
+          template-variables: ${{ steps.artifact-template-vars.outputs.json }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
