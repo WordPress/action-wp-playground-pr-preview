@@ -111,6 +111,7 @@ jobs:
     with:
       artifacts: my-plugin=build/my-plugin.zip
       node-version: '20'
+      node-cache: npm
       build-command: |
         npm ci
         npm run build:plugin-zip
@@ -358,6 +359,23 @@ blueprint-from-artifact: true
 ```
 
 Live: [example-monorepo-selective](https://github.com/adamziel/preview-in-playground-button-v3-example-monorepo-selective). PR description blueprints decode to install **only** the plugin(s) the PR touched.
+
+### Use repository-pinned Node or PHP tools in the reusable build
+
+Some plugins keep the Node version in `.nvmrc`, rely on the package-manager
+cache, or need a PHP tool such as `wp-cli` before creating the ZIP. The reusable
+build workflow can pass those setup knobs through to the underlying setup
+actions:
+
+```yaml
+node-version-file: '.nvmrc'
+node-cache: npm
+php-version: '8.3'
+php-tools: wp-cli
+```
+
+The build command remains responsible for installing dependencies and producing
+the ZIP listed in `artifacts`.
 
 ### Plugin with PHP dependencies and built JavaScript/CSS
 
@@ -655,7 +673,10 @@ Runs the caller's build command in the read-only `pull_request` context and bund
 | `build-command` | yes | — | Shell script that produces every path listed in `artifacts`. Runs in `bash`; `set -euo pipefail`-style strictness recommended. |
 | `working-directory` | no | `.` | Working directory for `build-command`. |
 | `node-version` | no | *unset* | If set, runs `actions/setup-node@v4` before `build-command`. |
+| `node-version-file` | no | *unset* | If set, passes `node-version-file` to `actions/setup-node@v4`. Useful for repositories that pin Node in `.nvmrc`. |
+| `node-cache` | no | *unset* | If set, passes `cache` to `actions/setup-node@v4`, for example `npm`. |
 | `php-version` | no | *unset* | If set, runs `shivammathur/setup-php@v2` before `build-command`. |
+| `php-tools` | no | *unset* | If `php-version` is set, passes `tools` to `shivammathur/setup-php@v2`, for example `wp-cli`. |
 | `fetch-depth` | no | `1` | Passed to `actions/checkout@v4`. Set to `0` when the build needs full history (e.g. diff against the base ref). |
 | `blueprint-from-build` | no | *unset* | Path (relative to `working-directory`) to a `blueprint.json` written by `build-command`. Bundled with the artifact for use with `blueprint-from-artifact: true` in publish. Validated as parseable JSON before upload. |
 
