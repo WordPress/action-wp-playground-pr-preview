@@ -85,7 +85,9 @@ test('cleanup sorts release assets by the GitHub CLI createdAt field', () => {
 test('cleanup workflow deletes all assets for the PR on close', () => {
   assert.match(cleanupWorkflow, /startswith\(\\"pr-\$PR_NUMBER-\\"\)/);
   assert.match(cleanupWorkflow, /gh release delete-asset/);
-  assert.match(cleanupWorkflow, /pull_request.*closed|closed.*pull_request/s);
+  // The workflow is a reusable workflow_call; callers should use pull_request: types: [closed]
+  assert.match(cleanupWorkflow, /on:\s+workflow_call:/s);
+  assert.match(cleanupWorkflow, /pull_request:[\s\S]*?types:[\s\S]*?closed/);
 });
 
 test('cleanup workflow deletion failures fail the workflow instead of being swallowed', () => {
