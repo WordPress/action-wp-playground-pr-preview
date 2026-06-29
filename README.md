@@ -515,6 +515,38 @@ Or for comment mode:
 
 Available template variables are listed under [Reference → Template variables](#template-variables).
 
+### Clean up artifacts when a PR is closed
+
+By default, the `ci-artifacts` release accumulates one set of ZIPs per PR
+commit (pruned to the most recent `artifacts-to-keep` sets while the PR is
+open). When a PR is merged or closed, its ZIPs are no longer needed. Add a
+separate workflow to delete them automatically.
+
+Create a third workflow file alongside your build and publish workflows:
+
+```yaml
+# .github/workflows/pr-preview-cleanup.yml
+name: PR Preview - Cleanup
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    permissions:
+      contents: write
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-cleanup.yml@v3
+    with:
+      pr-number: ${{ github.event.pull_request.number }}
+```
+
+The `release-tag` input defaults to `ci-artifacts` to match the publish
+workflow default. If you pass a custom `release-tag:` to the publish workflow,
+pass the same value here.
+
+This workflow runs in the **trusted base-repository context**, not from the PR
+branch, so fork PRs are safe — no untrusted code is executed.
+
 ---
 
 ## Using an LLM to add this to your repository
@@ -687,6 +719,24 @@ permissions:
 ```
 
 Without these, GitHub may fail the run at startup before the job logs are available. See [Troubleshooting](#troubleshooting).
+
+### Reusable workflow: `preview-cleanup.yml@v3`
+
+Deletes all release assets associated with a specific PR number from the `ci-artifacts` release. Pair this with a `pull_request: types: [closed]` workflow to automatically remove artifacts when a PR is merged or closed.
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `pr-number` | yes | — | Pull request number whose assets should be removed. |
+| `release-tag` | no | `ci-artifacts` | Release tag used to host artifacts publicly. Must match the value used in `preview-publish.yml`. |
+
+#### Required caller permissions
+
+The calling workflow **and** the calling job must both grant:
+
+```yaml
+permissions:
+  contents: write
+```
 
 ### Template variables
 
