@@ -211,7 +211,7 @@ Use this when a PR should preview a plugin and a theme from the same repository.
 
 ### Custom blueprint (companion plugins, version pin, seed data, login)
 
-When you need more than "install this plugin," provide a full Blueprint via `blueprint:`. Example: install your plugin from the PR, also install WooCommerce from .org, pin PHP and WP versions, and log in as admin.
+When you need more than "install this plugin," provide a full Blueprint via `blueprint:`. Example: install your plugin from the PR, also install WooCommerce from .org, pin PHP, use the latest WordPress release, and log in as admin.
 
 ```yaml
 - uses: WordPress/action-wp-playground-pr-preview@v3
@@ -219,7 +219,7 @@ When you need more than "install this plugin," provide a full Blueprint via `blu
     blueprint: |
       {
         "$schema": "https://playground.wordpress.net/blueprint-schema.json",
-        "preferredVersions": { "php": "8.3", "wp": "6.6" },
+        "preferredVersions": { "php": "8.3", "wp": "latest" },
         "steps": [
           { "step": "installPlugin",
             "pluginData": {
@@ -513,6 +513,7 @@ Or for comment mode:
       3. Verify `{{PLUGIN_SLUG}}` is active.
 
       **PR:** #{{PR_NUMBER}} — {{PR_TITLE}}
+    github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 Available template variables are listed under [Reference → Template variables](#template-variables).
