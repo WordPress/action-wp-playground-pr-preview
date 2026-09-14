@@ -126,10 +126,6 @@ on:
     workflows: ["PR Preview - Build"]
     types: [completed]
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   publish:
     permissions:
@@ -142,7 +138,9 @@ jobs:
 
 `kind: plugin` tells the publish workflow to generate the simplest Blueprint for one plugin ZIP: install it and activate it. Use `kind: theme` for one theme ZIP. For multiple ZIPs or extra setup steps, use a custom `blueprint:` recipe below.
 
-You do not need to create `secrets.GITHUB_TOKEN`; GitHub provides it automatically to each workflow run.
+The reusable publish workflow passes `secrets.GITHUB_TOKEN` to the action internally. Do not add `github-token` under `jobs.publish.with`: it is an action input, not a reusable workflow input. Neither a manually created secret nor `secrets: inherit` is needed for this token.
+
+Commit the publish workflow to the repository's default branch before testing a PR. GitHub reads `workflow_run` workflows from that branch, not from the PR branch.
 
 Open a pull request. The build workflow runs `npm ci && npm run build:plugin-zip`. After that succeeds, the publish workflow uploads the resulting ZIP to a public release URL and posts the Preview button. When someone clicks it, Playground installs and activates the built plugin.
 
@@ -397,9 +395,11 @@ The publish workflow can stay at `kind: plugin` because there is still only one 
 
 ### Built plugin with a custom Playground setup
 
-Use this when a built plugin needs more than the default "install and activate" preview. Common reasons include opening a specific admin page, installing PHP extensions, logging in automatically, or adding setup steps before the reviewer starts testing.
+Use this when a built plugin needs more than the default "install and activate" preview. Common reasons include opening a specific admin page, logging in automatically, or adding setup steps before the reviewer starts testing.
 
 The crux is that forked pull requests cannot safely run with write permissions. The build workflow runs untrusted code with read-only permissions and uploads only a ZIP artifact. The publish workflow runs later with write permissions, never checks out the pull request code, and substitutes the artifact URL into a Blueprint.
+
+This recipe runs Composer and uses `.distignore` to exclude files from the ZIP. If your repository has no `.distignore`, remove `--exclude-from='.distignore'`.
 
 Build workflow example:
 
@@ -439,10 +439,6 @@ on:
     workflows: ["PR Playground Preview Build"]
     types: [completed]
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   publish:
     permissions:
@@ -454,9 +450,8 @@ jobs:
         {
           "$schema": "https://playground.wordpress.net/blueprint-schema.json",
           "landingPage": "/wp-admin/admin.php?page=my-plugin",
-          "phpExtensionBundles": ["kitchen-sink"],
           "steps": [
-            { "step": "login", "username": "admin", "password": "password" },
+            { "step": "login", "username": "admin" },
             { "step": "installPlugin",
               "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:my-plugin}}" },
               "options": { "activate": true } }
@@ -588,8 +583,7 @@ get a red failure instead of a silent skip.
 Because the publish workflow is privileged, its third-party action references
 are pinned to commit SHAs. This avoids granting write permissions to a moved
 major-version tag. The internal button action is also called through an
-immutable v2 commit; v3 adds the reusable workflow layer around the same button
-action behavior.
+immutable commit, rather than a moving version tag.
 
 ### Trigger model and security
 
@@ -631,7 +625,7 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | `blueprint-url` | one of four† | — | URL pointing to a hosted Blueprint JSON. Used directly via `?blueprint-url=…`. |
 | `description-template` | no | `{{PLAYGROUND_BUTTON}}` | Template for the PR description block. Supports the [template variables](#template-variables). |
 | `comment-template` | no | (full default) | Template for the PR comment. Supports the [template variables](#template-variables). |
-| `restore-button-if-removed` | no | `true` | If the PR author removes the button block, restore it on the next run. Set `false` to respect deletions. Only applies to `append-to-description` mode. |
+| `restore-button-if-removed` | no | `true` | Add the button when its markers are absent. Set `false` to leave it absent, including on the first run. Existing managed buttons still update. Only applies to `append-to-description` mode. |
 | `pr-number` | no | *event payload* | Pull request number. Required when calling from a workflow that doesn't have a `pull_request` event payload (e.g. `workflow_run`). |
 | `github-token` | yes | — | Token with `pull-requests: write` and `contents: read`, usually `${{ secrets.GITHUB_TOKEN }}`. |
 
@@ -642,9 +636,9 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | Output | Description |
 |---|---|
 | `preview-url` | Full Playground URL embedded in the button. |
-| `blueprint-json` | Rendered Blueprint JSON string. Empty when `blueprint-url` is used. |
-| `rendered-description` | Markdown/HTML inserted into the PR description (when `mode: append-to-description`). |
-| `rendered-comment` | Markdown/HTML used for the PR comment (when `mode: comment`). |
+| `blueprint-json` | Blueprint JSON from `blueprint` or the path inputs. Empty when only `blueprint-url` is provided. |
+| `rendered-description` | Rendered description template, available in either mode even if the description was not updated. |
+| `rendered-comment` | Rendered comment template, available in either mode even if no comment was posted. |
 | `mode` | Effective mode (`append-to-description` or `comment`). |
 | `comment-id` | ID of the managed PR comment, when applicable. |
 
@@ -658,7 +652,7 @@ Runs the caller's build command in the read-only `pull_request` context and bund
 | `build-command` | yes | — | Shell script that produces every path listed in `artifacts`. Runs in `bash`; `set -euo pipefail`-style strictness recommended. |
 | `working-directory` | no | `.` | Working directory for `build-command`. |
 | `node-version` | no | *unset* | If set, runs `actions/setup-node@v4` before `build-command`. |
-| `php-version` | no | *unset* | If set, runs `shivammathur/setup-php@v2` before `build-command`. |
+| `php-version` | no | *unset* | If set, runs `shivammathur/setup-php@v2` before `build-command`. This selects the build's PHP version, not Playground's; use `preferredVersions.php` in a custom Blueprint for that. |
 | `fetch-depth` | no | `1` | Passed to `actions/checkout@v4`. Set to `0` when the build needs full history (e.g. diff against the base ref). |
 | `blueprint-from-build` | no | *unset* | Path (relative to `working-directory`) to a `blueprint.json` written by `build-command`. Bundled with the artifact for use with `blueprint-from-artifact: true` in publish. Validated as parseable JSON before upload. |
 
@@ -681,7 +675,7 @@ Runs in the privileged `workflow_run` context, exposes the artifact bundle's zip
 
 #### Required caller permissions
 
-The calling workflow **and** the calling job must both grant:
+The job that calls `preview-publish.yml` must grant:
 
 ```yaml
 permissions:
@@ -689,7 +683,9 @@ permissions:
   pull-requests: write
 ```
 
-Without these, GitHub may fail the run at startup before the job logs are available. See [Troubleshooting](#troubleshooting).
+Put this block under `jobs.publish`, as in the quick start. Alternatively, set it at the workflow level and let the job inherit it. You do not need both: a job-level block overrides the workflow-level defaults. See [GitHub's permission rules](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions).
+
+Without these permissions, GitHub may fail the run at startup before the job logs are available. See [Troubleshooting](#troubleshooting).
 
 ### Template variables
 
@@ -700,7 +696,7 @@ Available in `description-template` and `comment-template` strings (case-insensi
 | `PLAYGROUND_BUTTON` | Full button HTML — recommended in any custom template. |
 | `PLAYGROUND_URL` | Full Playground URL with embedded blueprint. |
 | `PLAYGROUND_BUTTON_IMAGE_URL` | URL of the button image asset. |
-| `PLAYGROUND_BLUEPRINT_JSON` | Stringified Blueprint JSON. Empty when `blueprint-url` is used. |
+| `PLAYGROUND_BLUEPRINT_JSON` | Blueprint JSON from `blueprint` or the path inputs. Empty when only `blueprint-url` is provided. |
 | `PLAYGROUND_BLUEPRINT_DATA_URL` | Blueprint data URL, or the provided `blueprint-url` when `blueprint-url` is used. |
 | `PLAYGROUND_HOST` | Playground host (default `https://playground.wordpress.net`). |
 | `PR_NUMBER`, `PR_TITLE`, `PR_HEAD_REF`, `PR_HEAD_SHA`, `PR_BASE_REF` | Pull request metadata. |
@@ -715,13 +711,22 @@ Available in `description-template` and `comment-template` strings (case-insensi
 ## Limitations & gotchas
 
 - **Two workflow files when there's a build step.** GitHub's permission model around fork PRs makes this unavoidable. The reusable workflows minimise but don't eliminate the boilerplate.
-- **Permissions ceiling is rigid.** Reusable workflows declare a maximum permission set; callers can match it or reduce it, not extend it.
+- **The caller sets the available permissions.** A reusable workflow can keep or reduce the permissions passed by its caller, but cannot add missing permissions. The publish caller must allow `contents: write` and `pull-requests: write`.
 - **Build and publish workflows must be pinned to compatible versions.** The artifact-naming format is the implicit interface between them. Use the same `@v3` (or branch ref) in both.
 - **Fork PR build output becomes public.** The publish workflow never trusts the zip, but it does upload it to a public release URL so Playground can fetch it. Keep `artifacts-to-keep` low unless you deliberately want longer retention.
-- **`{{ARTIFACT_URL:<name>}}` substitution is the only template feature.** No conditionals, no loops, no other placeholders. For per-PR variable shapes, write the blueprint at build time and use `blueprint-from-artifact: true`.
+- **Artifact Blueprint templates support only `{{ARTIFACT_URL:<name>}}` substitution.** No conditionals, loops, or other placeholders. For per-PR variable shapes, write the blueprint at build time and use `blueprint-from-artifact: true`. Description and comment templates have their own [template variables](#template-variables).
 - **One zip per `artifacts` entry.** Use multiple entries plus a custom `blueprint:` for multiple plugin/theme zips; the `kind:` shortcut is only for a single zip.
-- **Plugin zips must extract to a slug-named folder.** When you `zip -r my-plugin.zip .` from inside the plugin dir, the zip contents are at the root, and Playground will install them with no slug folder. Wrap with a directory: `mkdir stage/my-plugin && rsync -a ./ stage/my-plugin/ && (cd stage && zip -r ../my-plugin.zip my-plugin)`.
-- **`fetch-depth: 0` is required for diffs.** The default checkout is shallow (depth 1). Diffs against the PR base ref need full history, otherwise `git diff` fails with "no merge base."
+- **Plugin zips must extract to a slug-named folder.** Package `my-plugin/my-plugin.php`, not `my-plugin.php` at the ZIP root. From the plugin repository root, stage the files before zipping. Exclude the staging and output directories so they are not copied into themselves:
+
+  ```bash
+  mkdir -p stage/my-plugin build
+  rsync -a --exclude='.git' --exclude='.github' \
+    --exclude='stage' --exclude='build' ./ stage/my-plugin/
+  ( cd stage && zip -rq ../build/my-plugin.zip my-plugin )
+  ```
+
+  Add any project-specific exclusions, such as `node_modules`, before using this in your build.
+- **Base-ref diffs need enough history.** The default checkout is shallow (depth 1). Set `fetch-depth: 0` to fetch full history and avoid missing merge bases. If you use a shallow fetch instead, it must include the PR's merge base.
 - **The `ci-artifacts` release is shared across all PRs.** Each PR's zips are unique (`pr-<N>-<SHA>-<name>.zip`); cleanup keeps the N most recent commit-sets per PR.
 - **`artifacts-to-keep` must be a positive integer or `keep-all`.** `0`, negative numbers, and arbitrary strings fail before any release assets are uploaded.
 - **`workflow_run`-triggered workflows always read their YAML from the default branch.** Workflow changes on a PR branch don't take effect until merged. Test publish-side changes on a scratch repo first.
@@ -733,13 +738,9 @@ Available in `description-template` and `comment-template` strings (case-insensi
 
 ### The publish workflow run is `startup_failure` with no logs
 
-Almost always a permissions issue. The reusable workflow needs `contents: write` + `pull-requests: write`. Add the block in **two places** in your caller workflow:
+Check the workflow annotation for the cause. If it says the called workflow requests permissions that are not allowed, grant `contents: write` and `pull-requests: write` on the calling job:
 
 ```yaml
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   publish:
     permissions:
@@ -767,7 +768,9 @@ Usually a fatal in plugin activation — most often a missing `vendor/autoload.p
 
 ### The Preview button gets re-added after I delete it
 
-That's `restore-button-if-removed: true` (the default). Either set it to `false`, or replace the button block with a placeholder so the action treats it as user-customised:
+That's `restore-button-if-removed: true` (the default). Set it to `false` to skip insertion whenever the markers are absent. This also prevents the first insertion on a new PR: the action cannot tell a deleted block from one it never added.
+
+To hide the button on just one PR while still adding it to new PRs, leave the default enabled and replace the button block with a placeholder:
 
 ```html
 <!-- wp-playground-preview:start -->
@@ -777,7 +780,7 @@ That's `restore-button-if-removed: true` (the default). Either set it to `false`
 
 ### `Resource not accessible by integration`
 
-`pull-requests: write` is missing from the workflow that calls the action. Add the `permissions:` block.
+Check that the calling job grants `pull-requests: write` and the direct action step passes `github-token`. For a public fork PR, GitHub usually reduces `GITHUB_TOKEN` to read-only even when the workflow requests write access. Use the [two-workflow setup](#with-a-build-step) for those PRs.
 
 ### The reusable workflow `uses:` line fails YAML lint
 
@@ -796,7 +799,7 @@ The helper reads both the run and PR from `artifact-source-repository` (the call
 To migrate:
 
 1. **Replace your build workflow.** Move whatever it ran (`composer install`, `npm ci`, etc.) into the `build-command:` input of `preview-build.yml@v3`. Replace `actions/upload-artifact@v4` with `name=path` lines in `artifacts:`.
-2. **Replace your publish workflow.** Pick a [blueprint mode](#reusable-workflow-preview-publishymlv3): `kind:` for a single zip, `blueprint:` for fixed shapes, `blueprint-from-artifact:` for per-PR shapes. Add the `permissions:` block on both the workflow and the calling job.
+2. **Replace your publish workflow.** Pick a [blueprint mode](#reusable-workflow-preview-publishymlv3): `kind:` for a single zip, `blueprint:` for fixed shapes, `blueprint-from-artifact:` for per-PR shapes. Add the `permissions:` block on the calling job and commit the publish workflow to the default branch.
 3. **One-time:** if you have an existing `ci-artifacts` draft release, either delete it (the next run creates a fresh prerelease automatically) or convert it from draft to prerelease in the Releases UI. Draft release assets require authentication, so Playground cannot download them.
 
 Older README content is preserved in git history, including the legacy `github-proxy.com` URL scheme. Use `git log -- README.md` for historical reference. Do not copy the pre-v3 artifact-name parsing recipe into a new publish workflow; use the source-run checks described above or migrate to the reusable workflows.
@@ -807,7 +810,9 @@ Older README content is preserved in git history, including the legacy `github-p
 
 Issues and PRs welcome at <https://github.com/WordPress/action-wp-playground-pr-preview>.
 
-Use the four [example repos](#see-it-live) for manual integration testing. If you add a new feature or fix a bug, point an example repo at your branch and confirm the smoke-test PR still produces a working Preview button.
+Copy the fixtures from the four [example repos](#see-it-live) into a disposable public repository for manual integration testing. Leave the live examples unchanged. In the copies, replace the action and reusable workflow references with your fork and the full commit SHA being tested; use the same SHA for build and publish. The `WordPress/...@v3` references above use the upstream release, not changes merged only into a fork.
+
+Commit the test publish workflow to the disposable repository's default branch, then open a PR there. Confirm that the build uploads its ZIP, the publish job posts a button, and Playground activates the expected plugin or theme. Test description and comment modes separately.
 
 ## License
 
