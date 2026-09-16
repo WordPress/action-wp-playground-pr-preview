@@ -400,7 +400,7 @@ jobs:
 
       - name: Post Playground preview button
         if: env.SKIP != '1'
-        uses: WordPress/action-wp-playground-pr-preview@6a92c0ffc2cdddc4368a807ed79b696aa58eed3e
+        uses: WordPress/action-wp-playground-pr-preview@f299cc6ffa05a198005612625b21beade55c98fd
         with:
           mode: ${{ inputs.mode }}
           blueprint: ${{ steps.blueprint.outputs.blueprint }}
