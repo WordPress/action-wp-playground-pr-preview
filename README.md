@@ -17,7 +17,7 @@ Add a **Preview in WordPress Playground** button to pull requests for WordPress 
   <a href="#troubleshooting">troubleshooting</a>
 </p>
 
-> **Upgrading from v3?** v4 keeps the same direct-action and reusable build/publish setup paths. Some custom templates and legacy callers need changes. Read [Upgrading from v3](#upgrading-from-v3) before updating. Existing v2 and v3 tags are unchanged.
+> **Upgrading from v3?** v4 keeps the same direct-action and reusable build/publish setup paths. Some custom templates and legacy callers need changes. Read [Upgrading from v3](#upgrading-from-v3) before updating. v3 now emits an upgrade warning; its preview behavior is unchanged.
 
 Start with **[Quick start](#quick-start)** and choose the path that matches your repository.
 
@@ -802,7 +802,9 @@ Check these differences before upgrading:
 - **Legacy workflow-run callers:** pass the source run ID and its `head_sha`, and obtain the PR number from GitHub's event or API. The run must match the PR's current repository, branch, and commit. Use positive, unpadded run and PR numbers. The token needs `actions: read` and `pull-requests: read` in the source repository, plus `contents: write` where the release is published. The source lookup is described below.
 - **Release names:** the reusable publisher uses one PR number spelling for uploads and cleanup (`007` becomes `7`). Previously uploaded assets are not renamed.
 
-The `v2` and `v3` tags remain available at their existing commits. Updating the README does not update workflows already using those tags.
+The `v3` tag now includes an upgrade warning in the direct action, both reusable workflows, and the legacy artifact helper. The warning does not fail the job or change preview behavior. The `v2` tag and callers pinned to older commit hashes are unchanged; those callers do not receive the warning.
+
+v3 is deprecated. Use v4 for new setups and migrate existing callers using the steps above. No v3 support end date has been announced.
 
 ### Migrating pre-v3 workflows
 
