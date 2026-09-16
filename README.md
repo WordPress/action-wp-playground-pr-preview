@@ -17,7 +17,7 @@ Add a **Preview in WordPress Playground** button to pull requests for WordPress 
   <a href="#troubleshooting">troubleshooting</a>
 </p>
 
-> **Using v3?** v3 supports two setup paths: direct action inputs for plugins and themes that do not need a build step, and reusable build/publish workflows for previews that need Composer, npm, Vite, or other build output. See [Migrating from older usage](#migrating-from-older-usage) for what changed from older examples.
+> **Upgrading from v3?** v4 keeps the same direct-action and reusable build/publish setup paths. Some custom templates and legacy callers need changes. Read [Upgrading from v3](#upgrading-from-v3) before updating. Existing v2 and v3 tags are unchanged.
 
 Start with **[Quick start](#quick-start)** and choose the path that matches your repository.
 
@@ -74,7 +74,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: WordPress/action-wp-playground-pr-preview@v3
+      - uses: WordPress/action-wp-playground-pr-preview@v4
         with:
           plugin-path: .            # or: theme-path: .
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -107,7 +107,7 @@ on:
 
 jobs:
   build:
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v4
     with:
       artifacts: my-plugin=build/my-plugin.zip
       node-version: '20'
@@ -131,7 +131,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v4
     with:
       kind: plugin            # or: kind: theme
 ```
@@ -156,7 +156,7 @@ Expected result:
 
 ## See it live
 
-Each link is a real, public repo running these workflows. Each PR has a working Preview button that boots Playground with the PR's contents.
+Each link is a real, public repo running these workflows. Each PR has a working Preview button that boots Playground with the PR's contents. The repository names retain `v3` for stable links; their workflow references select the action version.
 
 | Shape | Repo | Same-repo PR | Fork PR |
 |---|---|---|---|
@@ -178,7 +178,7 @@ Unless a recipe shows a full workflow file, the YAML snippet is a replacement st
 In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.preview.steps` with:
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     plugin-path: plugins/my-awesome-plugin
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -189,7 +189,7 @@ In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.
 In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.preview.steps` with:
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     theme-path: .             # or themes/my-theme
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -200,7 +200,7 @@ In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.
 Use this when a PR should preview a plugin and a theme from the same repository. In `.github/workflows/pr-preview.yml`, replace the Quick start step under `jobs.preview.steps` with:
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     plugin-path: plugins/my-plugin
     theme-path:  themes/my-theme
@@ -212,7 +212,7 @@ Use this when a PR should preview a plugin and a theme from the same repository.
 When you need more than "install this plugin," provide a full Blueprint via `blueprint:`. Example: install your plugin from the PR, also install WooCommerce from .org, pin PHP, use the latest WordPress release, and log in as admin.
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     blueprint: |
       {
@@ -239,7 +239,7 @@ When you need more than "install this plugin," provide a full Blueprint via `blu
 Or host the blueprint elsewhere and pass the URL:
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     blueprint-url: https://example.com/path/to/blueprint.json
     github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -268,7 +268,7 @@ Put the `artifacts` and `build-command` inputs under `jobs.build.with` in `.gith
 ```yaml
 jobs:
   build:
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v4
     with:
       artifacts: |
         site-toolkit=build/site-toolkit.zip
@@ -292,17 +292,17 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v4
     with:
       blueprint: |
         {
           "$schema": "https://playground.wordpress.net/blueprint-schema.json",
           "steps": [
             { "step": "installPlugin",
-              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-toolkit}}" },
+              "pluginData": { "resource": "url", "url": "{{ARTIFACT_URL:site-toolkit}}" },
               "options": { "activate": true } },
             { "step": "installPlugin",
-              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:site-analytics}}" },
+              "pluginData": { "resource": "url", "url": "{{ARTIFACT_URL:site-analytics}}" },
               "options": { "activate": true } }
           ]
         }
@@ -342,7 +342,7 @@ build-command: |
     $schema: 'https://playground.wordpress.net/blueprint-schema.json',
     steps: (slugs.length ? slugs : ['alpha', 'beta']).map(s => ({
       step: 'installPlugin',
-      pluginZipFile: { resource: 'url', url: '{{ARTIFACT_URL:' + s + '}}' },
+      pluginData: { resource: 'url', url: '{{ARTIFACT_URL:' + s + '}}' },
       options: { activate: true },
     })),
   }));
@@ -412,7 +412,7 @@ on:
 
 jobs:
   build:
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-build.yml@v4
     with:
       php-version: '8.1'
       artifacts: my-plugin=build/my-plugin.zip
@@ -444,7 +444,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v4
     with:
       blueprint: |
         {
@@ -453,7 +453,7 @@ jobs:
           "steps": [
             { "step": "login", "username": "admin" },
             { "step": "installPlugin",
-              "pluginZipFile": { "resource": "url", "url": "{{ARTIFACT_URL:my-plugin}}" },
+              "pluginData": { "resource": "url", "url": "{{ARTIFACT_URL:my-plugin}}" },
               "options": { "activate": true } }
           ]
         }
@@ -464,7 +464,7 @@ The important connection is the artifact name. `artifacts: my-plugin=...` in the
 ### Post the button as a comment instead of editing the description
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     plugin-path: .
     mode: comment
@@ -478,7 +478,7 @@ Comment mode reuses a preview comment only when its marker and author match the 
 ### Customize the button text or add testing instructions
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     plugin-path: .
     description-template: |
@@ -493,7 +493,7 @@ Comment mode reuses a preview comment only when its marker and author match the 
 Or for comment mode:
 
 ```yaml
-- uses: WordPress/action-wp-playground-pr-preview@v3
+- uses: WordPress/action-wp-playground-pr-preview@v4
   with:
     plugin-path: .
     mode: comment
@@ -522,7 +522,7 @@ If you ask an LLM or coding agent to set this up, give it enough context to choo
 Suggested prompt:
 
 ```text
-Add WordPress/action-wp-playground-pr-preview@v3 to this repository.
+Add WordPress/action-wp-playground-pr-preview@v4 to this repository.
 First inspect whether the WordPress plugin or theme can run directly from the repository checkout, or whether CI must build files first.
 If no build step is needed, add one pull_request workflow using plugin-path or theme-path.
 If a build step is needed, add the two-workflow preview-build.yml / preview-publish.yml setup.
@@ -535,7 +535,7 @@ Checklist for reviewing the LLM's output:
 - `secrets.GITHUB_TOKEN` is referenced but not created manually.
 - Direct action usage appears under `jobs.<job_id>.steps[].uses`.
 - Reusable workflow usage appears under `jobs.<job_id>.uses`.
-- Build and publish workflows use the same version, for example `@v3`.
+- Build and publish workflows use the same version, for example `@v4`.
 - Every `artifacts` entry has the form `name=path/to/file.zip`, and the build command creates that exact ZIP path.
 - Plugin ZIPs wrap their files in a stable folder so installed paths do not depend on the PR-specific ZIP filename.
 - The workflow does not use `pull_request_target`.
@@ -611,7 +611,7 @@ The `ci-artifacts` release is created as a **`--prerelease`**, not a draft. Prer
 
 ## Reference
 
-### Action: `WordPress/action-wp-playground-pr-preview@v3`
+### Action: `WordPress/action-wp-playground-pr-preview@v4`
 
 Use directly when there's no build step, or have the publish workflow call it (it does, internally).
 
@@ -642,7 +642,7 @@ Use directly when there's no build step, or have the publish workflow call it (i
 | `mode` | Effective mode (`append-to-description` or `comment`). |
 | `comment-id` | ID of the managed PR comment, when applicable. |
 
-### Reusable workflow: `preview-build.yml@v3`
+### Reusable workflow: `preview-build.yml@v4`
 
 Runs the caller's build command in the read-only `pull_request` context and bundles the produced zip(s) into a single GitHub Actions artifact for the publish workflow to consume.
 
@@ -658,7 +658,7 @@ Runs the caller's build command in the read-only `pull_request` context and bund
 
 The bundle artifact is named `wp-playground-preview-pr<N>-<SHA>` and contains `zips/<name>.zip` per `artifacts` entry plus optional `blueprint.json`.
 
-### Reusable workflow: `preview-publish.yml@v3`
+### Reusable workflow: `preview-publish.yml@v4`
 
 Runs in the privileged `workflow_run` context, exposes the artifact bundle's zips on a public release URL, renders the Blueprint, and posts the Preview button.
 
@@ -712,7 +712,7 @@ Available in `description-template` and `comment-template` strings (case-insensi
 
 - **Two workflow files when there's a build step.** GitHub's permission model around fork PRs makes this unavoidable. The reusable workflows minimise but don't eliminate the boilerplate.
 - **The caller sets the available permissions.** A reusable workflow can keep or reduce the permissions passed by its caller, but cannot add missing permissions. The publish caller must allow `contents: write` and `pull-requests: write`.
-- **Build and publish workflows must be pinned to compatible versions.** The artifact-naming format is the implicit interface between them. Use the same `@v3` (or branch ref) in both.
+- **Build and publish workflows must be pinned to compatible versions.** The artifact-naming format is the implicit interface between them. Use the same `@v4` (or branch ref) in both.
 - **Fork PR build output becomes public.** The publish workflow never trusts the zip, but it does upload it to a public release URL so Playground can fetch it. Keep `artifacts-to-keep` low unless you deliberately want longer retention.
 - **Artifact Blueprint templates support only `{{ARTIFACT_URL:<name>}}` substitution.** No conditionals, loops, or other placeholders. For per-PR variable shapes, write the blueprint at build time and use `blueprint-from-artifact: true`. Description and comment templates have their own [template variables](#template-variables).
 - **One zip per `artifacts` entry.** Use multiple entries plus a custom `blueprint:` for multiple plugin/theme zips; the `kind:` shortcut is only for a single zip.
@@ -746,7 +746,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v3
+    uses: WordPress/action-wp-playground-pr-preview/.github/workflows/preview-publish.yml@v4
     # ...
 ```
 
@@ -784,13 +784,29 @@ Check that the calling job grants `pull-requests: write` and the direct action s
 
 ### The reusable workflow `uses:` line fails YAML lint
 
-`WordPress/action-wp-playground-pr-preview/.github/workflows/preview-{build,publish}.yml@v3` is a *reusable workflow* path, distinct from `WordPress/action-wp-playground-pr-preview@v3` which is the action. Both are valid; use them in the right place. Reusable workflows go under `jobs.<id>.uses`. Actions go under `jobs.<id>.steps[].uses`.
+`WordPress/action-wp-playground-pr-preview/.github/workflows/preview-{build,publish}.yml@v4` is a *reusable workflow* path, distinct from `WordPress/action-wp-playground-pr-preview@v4` which is the action. Both are valid; use them in the right place. Reusable workflows go under `jobs.<id>.uses`. Actions go under `jobs.<id>.steps[].uses`.
 
 ---
 
 ## Migrating from older usage
 
-The common pre-v3 advanced pattern required a long custom YAML setup across two workflow files: GitHub Script for parsing artifact metadata, a Node heredoc for building the Blueprint, and a manual one-time step to publish a draft release. The reusable workflows now handle those details. If you used less-common `expose-artifact-on-public-url` inputs such as `artifact-source-repository`, `release-repository`, `create-release-if-missing`, or `cleanup-enabled`, use the [legacy helper with source-run checks](.github/actions/expose-artifact-on-public-url/action.yml) or wrap the reusable workflow until v3 supports those options. Update older pinned helper revisions before keeping a custom publish workflow.
+### Upgrading from v3
+
+Change direct action references from `@v3` to `@v4`. For built previews, change **both** `preview-build.yml` and `preview-publish.yml` references to `@v4`. The existing inputs and build commands still apply. Keep the publish caller on the default branch.
+
+Check these differences before upgrading:
+
+- **Custom templates:** put `PR_*` and `REPO_*` placeholders outside Markdown code spans or fenced blocks. For example, replace ``**Branch:** `{{PR_HEAD_REF}}` `` with `**Branch:** {{PR_HEAD_REF}}`. These values now render as literal text, including punctuation in titles and branch names.
+- **Comment mode:** existing comments are reused only when their marker and author match the account behind `github-token`. Switching accounts creates a new comment. A failed account lookup stops the update.
+- **Artifact bundles:** use ordinary files and directories, not links or special files. The legacy helper now copies only the requested `artifact-filename` into a temporary directory; other bundle files are no longer extracted into the caller's workspace.
+- **Legacy workflow-run callers:** pass the source run ID and its `head_sha`, and obtain the PR number from GitHub's event or API. The run must match the PR's current repository, branch, and commit. Use positive, unpadded run and PR numbers. The token needs `actions: read` and `pull-requests: read` in the source repository, plus `contents: write` where the release is published. The source lookup is described below.
+- **Release names:** the reusable publisher uses one PR number spelling for uploads and cleanup (`007` becomes `7`). Previously uploaded assets are not renamed.
+
+The `v2` and `v3` tags remain available at their existing commits. Updating the README does not update workflows already using those tags.
+
+### Migrating pre-v3 workflows
+
+The common pre-v3 advanced pattern required a long custom YAML setup across two workflow files: GitHub Script for parsing artifact metadata, a Node heredoc for building the Blueprint, and a manual one-time step to publish a draft release. The reusable workflows now handle those details. If you used less-common `expose-artifact-on-public-url` inputs such as `artifact-source-repository`, `release-repository`, `create-release-if-missing`, or `cleanup-enabled`, use the [legacy helper with source-run checks](.github/actions/expose-artifact-on-public-url/action.yml) or wrap the reusable workflow for those options. Update older pinned helper revisions before keeping a custom publish workflow.
 
 For legacy `workflow_run` callers, pass `artifact-source-run-id: ${{ github.event.workflow_run.id }}` and set `commit-sha` from that run's `head_sha`. Get `pr-number` from GitHub's event or API data, never from an artifact name or file. Use the PR number in `workflow_run.pull_requests` when that list identifies one PR. Fork runs can have an empty list; in that case, query the source repository's `pulls` API with `head=OWNER:BRANCH` and `state=all`, using `workflow_run.head_repository.owner.login` and `workflow_run.head_branch`. Follow all pages and match `head.repo.full_name` and `head.ref` to the run. Require exactly one matching PR, then check its current `head.sha`. A commit hash alone can match several forks or PRs.
 
@@ -798,8 +814,8 @@ The helper reads both the run and PR from `artifact-source-repository` (the call
 
 To migrate:
 
-1. **Replace your build workflow.** Move whatever it ran (`composer install`, `npm ci`, etc.) into the `build-command:` input of `preview-build.yml@v3`. Replace `actions/upload-artifact@v4` with `name=path` lines in `artifacts:`.
-2. **Replace your publish workflow.** Pick a [blueprint mode](#reusable-workflow-preview-publishymlv3): `kind:` for a single zip, `blueprint:` for fixed shapes, `blueprint-from-artifact:` for per-PR shapes. Add the `permissions:` block on the calling job and commit the publish workflow to the default branch.
+1. **Replace your build workflow.** Move whatever it ran (`composer install`, `npm ci`, etc.) into the `build-command:` input of `preview-build.yml@v4`. Replace `actions/upload-artifact@v4` with `name=path` lines in `artifacts:`.
+2. **Replace your publish workflow.** Pick a [blueprint mode](#reusable-workflow-preview-publishymlv4): `kind:` for a single zip, `blueprint:` for fixed shapes, `blueprint-from-artifact:` for per-PR shapes. Add the `permissions:` block on the calling job and commit the publish workflow to the default branch.
 3. **One-time:** if you have an existing `ci-artifacts` draft release, either delete it (the next run creates a fresh prerelease automatically) or convert it from draft to prerelease in the Releases UI. Draft release assets require authentication, so Playground cannot download them.
 
 Older README content is preserved in git history, including the legacy `github-proxy.com` URL scheme. Use `git log -- README.md` for historical reference. Do not copy the pre-v3 artifact-name parsing recipe into a new publish workflow; use the source-run checks described above or migrate to the reusable workflows.
@@ -810,7 +826,7 @@ Older README content is preserved in git history, including the legacy `github-p
 
 Issues and PRs welcome at <https://github.com/WordPress/action-wp-playground-pr-preview>.
 
-Copy the fixtures from the four [example repos](#see-it-live) into a disposable public repository for manual integration testing. Leave the live examples unchanged. In the copies, replace the action and reusable workflow references with your fork and the full commit SHA being tested; use the same SHA for build and publish. The `WordPress/...@v3` references above use the upstream release, not changes merged only into a fork.
+Copy the fixtures from the four [example repos](#see-it-live) into a disposable public repository for manual integration testing. Leave the live examples unchanged. In the copies, replace the action and reusable workflow references with your fork and the full commit SHA being tested; use the same SHA for build and publish. The `WordPress/...@v4` references above use the upstream release, not changes merged only into a fork.
 
 Commit the test publish workflow to the disposable repository's default branch, then open a PR there. Confirm that the build uploads its ZIP, the publish job posts a button, and Playground activates the expected plugin or theme. Test description and comment modes separately.
 
