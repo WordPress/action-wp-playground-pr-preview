@@ -72,6 +72,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Warn about v3
+      shell: bash
+      run: |
+        echo "::warning::WordPress/action-wp-playground-pr-preview v3 is deprecated. Upgrade to v4; for built previews, update both build and publish workflow references. Migration guide: https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3"
+
     - name: Configure release token
       shell: bash
       env:

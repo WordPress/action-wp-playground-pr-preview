@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 const publishWorkflow = readFileSync(
   new URL('../.github/workflows/preview-publish.yml', import.meta.url),
@@ -77,6 +78,35 @@ test('cleanup sorts release assets by the GitHub CLI createdAt field', () => {
   assert.doesNotMatch(exposeArtifactAction, /created_at/);
   assert.match(exposeArtifactAction, /createdAt/);
 });
+
+const upgradeWarning = 'WordPress/action-wp-playground-pr-preview v3 is deprecated. Upgrade to v4; for built previews, update both build and publish workflow references. Migration guide: https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3';
+
+for (const entry of ['src/index.js', 'dist/index.js']) {
+  test(`${entry} warns before validating inputs`, () => {
+    const result = spawnSync(process.execPath, [new URL(`../${entry}`, import.meta.url).pathname], {
+      encoding: 'utf8',
+      env: { ...process.env, 'INPUT_GITHUB-TOKEN': '' },
+    });
+    assert.equal(result.status, 1);
+    assert.ok(result.stdout.includes(`::warning::${upgradeWarning}`));
+    assert.ok(result.stdout.includes('::error::GITHUB_TOKEN (or github-token input) is required'));
+  });
+}
+
+for (const entry of [
+  '.github/workflows/preview-build.yml',
+  '.github/workflows/preview-publish.yml',
+  '.github/actions/expose-artifact-on-public-url/action.yml',
+]) {
+  test(`${entry} emits a warning without failing`, () => {
+    const yaml = readFileSync(new URL(`../${entry}`, import.meta.url), 'utf8');
+    const warning = yaml.match(/- name: Warn about v3\n\s+shell: bash\n\s+run: \|\n\s+(echo [^\n]+)\n/);
+    assert.ok(warning, 'Missing v3 warning step');
+    const result = spawnSync('bash', ['-e', '-c', warning[1]], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), `::warning::${upgradeWarning}`);
+  });
+}
 
 function test(name, fn) {
   try {

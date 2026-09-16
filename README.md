@@ -1,5 +1,7 @@
 # WordPress Playground PR Preview
 
+> **v3 is deprecated.** Use [v4](https://github.com/WordPress/action-wp-playground-pr-preview/tree/v4) for new setups and follow the [upgrade guide](https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3) for existing workflows. This v3 update adds an upgrade warning without changing preview behavior. No support end date has been announced. Callers pinned to an older commit keep that code and do not receive this warning.
+
 Add a **Preview in WordPress Playground** button to every pull request — so reviewers can try your plugin or theme in a real WordPress instance, in their browser, with one click.
 
 <p align="center">

@@ -67,6 +67,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Warn about v3
+        shell: bash
+        run: |
+          echo "::warning::WordPress/action-wp-playground-pr-preview v3 is deprecated. Upgrade to v4; for built previews, update both build and publish workflow references. Migration guide: https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3"
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # Untrusted code: never persist credentials.
