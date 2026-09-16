@@ -12,21 +12,21 @@ inputs:
     default: plugin.zip
 
   artifact-source-run-id:
-    description: 'Workflow run ID that produced the artifact (defaults to current workflow run)'
+    description: 'Pull request workflow run ID that produced the artifact; the PR, head repository, branch, and SHA must match (defaults to current workflow run)'
     required: false
     default: ''
 
   artifact-source-repository:
-    description: 'Owner/name of the repository that contains the artifact run (defaults to the caller repository)'
+    description: 'Owner/name of the repository that contains the artifact run and pull request (defaults to the caller repository)'
     required: false
     default: ''
 
   pr-number:
-    description: Pull request number (e.g., `github.event.pull_request.number`)
+    description: Pull request number from the GitHub event or API (e.g., `github.event.pull_request.number`), never from artifact metadata
     required: true
 
   commit-sha:
-    description: Commit SHA for unique artifact naming (e.g., `github.sha`)
+    description: Commit SHA from the GitHub event or API, never from artifact metadata; must match the source run head SHA when artifact-source-run-id is set
     required: true
 
   artifacts-to-keep:
@@ -55,7 +55,7 @@ inputs:
     default: 'true'
 
   github-token:
-    description: 'Token with `contents: write` access to the target repository (defaults to caller GITHUB_TOKEN)'
+    description: 'Token with `contents: write` access to the release repository and, for workflow-run artifacts, `actions: read` and `pull-requests: read` in the source repository (defaults to caller GITHUB_TOKEN)'
     required: false
     default: ''
 
@@ -107,16 +107,71 @@ runs:
         name: ${{ inputs.artifact-name }}
 
     - name: Download build artifact from workflow run
+      id: download-workflow-artifact
       if: ${{ inputs.artifact-source-run-id != '' }}
       shell: bash
       env:
         ARTIFACT_NAME: ${{ inputs.artifact-name }}
         ARTIFACT_FILENAME: ${{ inputs.artifact-filename }}
         ARTIFACT_SOURCE_RUN_ID: ${{ inputs.artifact-source-run-id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        COMMIT_SHA: ${{ inputs.commit-sha }}
       run: |
         set -euo pipefail
         artifact_repo="${ARTIFACT_SOURCE_REPOSITORY:-$GITHUB_REPOSITORY}"
         run_id="$ARTIFACT_SOURCE_RUN_ID"
+
+        if ! [[ "$run_id" =~ ^[1-9][0-9]*$ && "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+          echo "artifact-source-run-id and pr-number must be positive integers" >&2
+          exit 1
+        fi
+
+        export SOURCE_RUN_JSON SOURCE_PR_JSON
+        SOURCE_RUN_JSON=$(gh api "/repos/$artifact_repo/actions/runs/$run_id")
+        SOURCE_PR_JSON=$(gh api "/repos/$artifact_repo/pulls/$PR_NUMBER")
+        python3 <<'PY'
+        import json
+        import os
+        import re
+        import subprocess
+
+        # Fork runs can have an empty pull_requests list. Read the PR directly
+        # and check its current head before downloading or changing a release.
+        # A shared commit does not distinguish different forks or branches.
+        run = json.loads(os.environ['SOURCE_RUN_JSON'])
+        pr = json.loads(os.environ['SOURCE_PR_JSON'])
+        number = int(os.environ['PR_NUMBER'])
+        sha = run.get('head_sha') or ''
+        if not re.fullmatch('[0-9a-f]{40}', sha) or sha != os.environ['COMMIT_SHA']:
+            raise SystemExit('commit-sha does not match source run head SHA')
+        head = pr.get('head') or {}
+        if head.get('sha') != sha:
+            raise SystemExit(f'PR #{number} head SHA does not match source run head SHA')
+        if run.get('event') != 'pull_request':
+            raise SystemExit('Artifact source must be a pull_request run')
+        run_repo = run.get('head_repository') or {}
+        pr_repo = head.get('repo') or {}
+        if not run_repo.get('full_name') or run_repo['full_name'].lower() != (pr_repo.get('full_name') or '').lower():
+            raise SystemExit('PR head repository does not match source run')
+        if not run.get('head_branch') or run['head_branch'] != head.get('ref'):
+            raise SystemExit('PR head branch does not match source run')
+
+        pull_requests = run.get('pull_requests') or []
+        if not pull_requests:
+            # A branch can also have several PRs against different base branches.
+            # Without a run-provided PR number, only an unambiguous match is usable.
+            artifact_repo = os.environ.get('ARTIFACT_SOURCE_REPOSITORY') or os.environ['GITHUB_REPOSITORY']
+            pages = json.loads(subprocess.check_output([
+                'gh', 'api', f'/repos/{artifact_repo}/pulls', '--method', 'GET',
+                '-f', f"head={run_repo['owner']['login']}:{run['head_branch']}",
+                '-f', 'state=all', '-f', 'per_page=100', '--paginate', '--slurp',
+            ]))
+            pull_requests = [candidate for page in pages for candidate in page
+                if ((candidate.get('head') or {}).get('repo') or {}).get('full_name', '').lower() == run_repo['full_name'].lower()
+                and (candidate.get('head') or {}).get('ref') == run['head_branch']]
+        if len(pull_requests) != 1 or pull_requests[0].get('number') != number:
+            raise SystemExit(f'Source run must identify exactly PR #{number}')
+        PY
 
         echo "Fetching artifact '$ARTIFACT_NAME' from workflow run $run_id in $artifact_repo"
 
@@ -130,19 +185,45 @@ runs:
           exit 1
         fi
 
-        download_path="$RUNNER_TEMP/${ARTIFACT_NAME}-artifact.zip"
+        export ARTIFACT_DIRECTORY
+        ARTIFACT_DIRECTORY=$(mktemp -d "$RUNNER_TEMP/playground-artifact.XXXXXX")
+        echo "directory=$ARTIFACT_DIRECTORY" >> "$GITHUB_OUTPUT"
+        download_path="$ARTIFACT_DIRECTORY/download.zip"
         echo "Downloading artifact id $artifact_id to $download_path"
         gh api -X GET \
           "/repos/$artifact_repo/actions/artifacts/$artifact_id/zip" \
           > "$download_path"
 
-        echo "Extracting artifact contents into workspace"
-        unzip -oq "$download_path" -d "$GITHUB_WORKSPACE"
+        python3 <<'PY'
+        import os
+        import shutil
+        import stat
+        from pathlib import Path, PurePosixPath
+        from zipfile import ZipFile
 
-        if [ ! -f "$ARTIFACT_FILENAME" ]; then
-          echo "Expected file '$ARTIFACT_FILENAME' not found inside artifact '$ARTIFACT_NAME'" >&2
-          exit 1
-        fi
+        directory = Path(os.environ['ARTIFACT_DIRECTORY'])
+        filename = os.environ['ARTIFACT_FILENAME']
+        with ZipFile(directory / 'download.zip') as archive:
+            # Check every entry before copying the requested file. Other archive
+            # contents are not needed for the release and must not be unpacked.
+            for entry in archive.infolist():
+                path = PurePosixPath(entry.filename)
+                if path.is_absolute() or '..' in path.parts or '\\' in entry.filename:
+                    raise SystemExit(f'Invalid artifact path: {entry.filename!r}')
+
+                file_type = stat.S_IFMT(entry.external_attr >> 16)
+                expected_type = stat.S_IFDIR if entry.is_dir() else stat.S_IFREG
+                if file_type not in (0, expected_type):
+                    raise SystemExit(f'Artifact entry must be a regular file or directory: {entry.filename!r}')
+
+            matches = [entry for entry in archive.infolist() if entry.filename == filename and not entry.is_dir()]
+            if len(matches) != 1:
+                raise SystemExit(f'Expected exactly one regular file named {filename!r} in artifact')
+
+            # Use a fixed local name rather than a path supplied by the archive.
+            with archive.open(matches[0]) as source, (directory / 'artifact.zip').open('xb') as target:
+                shutil.copyfileobj(source, target)
+        PY
 
     - name: Determine release repository
       shell: bash
@@ -187,6 +268,7 @@ runs:
       env:
         RELEASE_TAG: ${{ inputs.release-tag }}
         ARTIFACT_FILENAME: ${{ inputs.artifact-filename }}
+        ARTIFACT_DIRECTORY: ${{ steps.download-workflow-artifact.outputs.directory }}
         PR_NUMBER: ${{ inputs.pr-number }}
         COMMIT_SHA: ${{ inputs.commit-sha }}
       run: |
@@ -194,10 +276,20 @@ runs:
         release_repo="${RELEASE_REPOSITORY:-$GITHUB_REPOSITORY}"
         artifact_name="pr-${PR_NUMBER}-${COMMIT_SHA}.zip"
 
-        mv "$ARTIFACT_FILENAME" "$artifact_name"
+        artifact_path="$ARTIFACT_FILENAME"
+        if [ -n "$ARTIFACT_DIRECTORY" ]; then
+          artifact_path="$ARTIFACT_DIRECTORY/artifact.zip"
+        fi
+        if [ -L "$artifact_path" ] || [ ! -f "$artifact_path" ]; then
+          echo "Artifact must be a regular file: $artifact_path" >&2
+          exit 1
+        fi
+
+        upload_path="${ARTIFACT_DIRECTORY:-.}/$artifact_name"
+        mv -- "$artifact_path" "$upload_path"
 
         echo "Uploading $artifact_name to $RELEASE_TAG release..."
-        gh release upload "$RELEASE_TAG" "$artifact_name" \
+        gh release upload "$RELEASE_TAG" "$upload_path" \
           --repo "$release_repo" \
           --clobber
 
@@ -206,6 +298,13 @@ runs:
         echo "artifact-name=$artifact_name" >> "$GITHUB_OUTPUT"
         echo "artifact-url=$artifact_url" >> "$GITHUB_OUTPUT"
         echo "Artifact uploaded to: $artifact_url"
+
+    - name: Remove downloaded artifact files
+      if: ${{ always() && steps.download-workflow-artifact.outputs.directory != '' }}
+      shell: bash
+      env:
+        ARTIFACT_DIRECTORY: ${{ steps.download-workflow-artifact.outputs.directory }}
+      run: rm -rf -- "$ARTIFACT_DIRECTORY"
 
     - name: Cleanup old artifacts for this PR
       if: ${{ inputs.cleanup-enabled == 'true' }}

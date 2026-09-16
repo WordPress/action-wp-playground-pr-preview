@@ -144,7 +144,11 @@ jobs:
             const a = artifacts[0];
             const m = a.name.match(/^wp-playground-preview-pr(\d+)-(.+)$/);
             if (!m) throw new Error(`Cannot parse artifact name: ${a.name}`);
-            const [, prNumber, commitSha] = m;
+            const [, rawPrNumber, commitSha] = m;
+            const prNumber = Number(rawPrNumber);
+            if (!Number.isSafeInteger(prNumber) || prNumber < 1) {
+              throw new Error('Artifact PR number must be a positive safe integer.');
+            }
             const expectedSha = context.payload.workflow_run.head_sha;
             if (commitSha !== expectedSha) {
               throw new Error(`Artifact SHA ${commitSha} does not match source workflow_run.head_sha ${expectedSha}.`);
@@ -156,14 +160,14 @@ jobs:
             const prResponse = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: Number(prNumber),
+              pull_number: prNumber,
             });
             if (prResponse.data.head.sha !== expectedSha) {
               throw new Error(`Artifact PR number ${prNumber} points to head SHA ${prResponse.data.head.sha}, not workflow_run.head_sha ${expectedSha}.`);
             }
             core.setOutput('artifact-id', String(a.id));
             core.setOutput('artifact-name', a.name);
-            core.setOutput('pr-number', prNumber);
+            core.setOutput('pr-number', String(prNumber));
             core.setOutput('commit-sha', commitSha);
 
       - name: Download artifact bundle
@@ -174,10 +178,66 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p bundle
           gh api -X GET "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}/zip" > bundle.zip
-          unzip -oq bundle.zip -d bundle
+
+      - name: Extract artifact bundle
+        if: env.SKIP != '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf bundle
+          python3 <<'PY'
+          import stat
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          root = Path('bundle').resolve()
+
+          with ZipFile('bundle.zip') as archive:
+              # Check the complete archive before writing any of its contents.
+              for entry in archive.infolist():
+                  destination = (root / entry.filename).resolve()
+                  if destination != root and root not in destination.parents:
+                      raise SystemExit(f'Invalid bundle path: {entry.filename!r}')
+
+                  mode = entry.external_attr >> 16
+                  file_type = stat.S_IFMT(mode)
+                  expected_type = stat.S_IFDIR if entry.is_dir() else stat.S_IFREG
+                  if entry.create_system == 3 and file_type not in (0, expected_type):
+                      raise SystemExit(f'Bundle entry must be a regular file or directory: {entry.filename!r}')
+
+              archive.extractall(root)
+          PY
           ls -R bundle
+
+      - name: Prepare release assets
+        if: env.SKIP != '1'
+        shell: bash
+        env:
+          PR_NUMBER: ${{ steps.meta.outputs.pr-number }}
+          COMMIT_SHA: ${{ steps.meta.outputs.commit-sha }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          rm -rf release-assets
+          mkdir release-assets
+          manifest="$RUNNER_TEMP/release-assets.tsv"
+          : > "$manifest"
+          for src in bundle/zips/*.zip; do
+            if [ ! -f "$src" ] || [ -L "$src" ]; then
+              echo "::error::Bundle artifact must be a regular file: $src" >&2
+              exit 1
+            fi
+            name="$(basename "$src" .zip)"
+            if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+              echo "::error::Invalid artifact name '$name' (allowed: A-Za-z0-9_-)" >&2
+              exit 1
+            fi
+            asset="pr-${PR_NUMBER}-${COMMIT_SHA}-${name}.zip"
+            cp -- "$src" "release-assets/$asset"
+            printf '%s\t%s\n' "$name" "$asset" >> "$manifest"
+          done
+          echo "RELEASE_ASSET_MANIFEST=$manifest" >> "$GITHUB_ENV"
 
       - name: Ensure release exists
         if: env.SKIP != '1'
@@ -208,14 +268,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          shopt -s nullglob
           mapping_file="$RUNNER_TEMP/artifact-urls.json"
           echo '{}' > "$mapping_file"
-          for src in bundle/zips/*.zip; do
-            name="$(basename "$src" .zip)"
-            asset="pr-${PR_NUMBER}-${COMMIT_SHA}-${name}.zip"
-            cp "$src" "$asset"
-            gh release upload "$RELEASE_TAG" "$asset" --repo "$GITHUB_REPOSITORY" --clobber
+          while IFS=$'\t' read -r name asset; do
+            [ -n "$name" ] || continue
+            staged="release-assets/$asset"
+            if [ ! -f "$staged" ] || [ -L "$staged" ]; then
+              echo "::error::Prepared release asset must be a regular file: $staged" >&2
+              exit 1
+            fi
+            gh release upload "$RELEASE_TAG" "$staged" --repo "$GITHUB_REPOSITORY" --clobber
             url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${asset}"
             node -e '
               const fs = require("fs");
@@ -225,7 +287,7 @@ jobs:
               fs.writeFileSync(f, JSON.stringify(j));
             ' "$mapping_file" "$name" "$url"
             echo "Exposed: $name -> $url"
-          done
+          done < "$RELEASE_ASSET_MANIFEST"
           echo "mapping-file=$mapping_file" >> "$GITHUB_OUTPUT"
           echo "first-name=$(node -e 'const j=require(process.argv[1]);console.log(Object.keys(j)[0]||"")' "$mapping_file")" >> "$GITHUB_OUTPUT"
           echo "count=$(node -e 'console.log(Object.keys(require(process.argv[1])).length)' "$mapping_file")" >> "$GITHUB_OUTPUT"
@@ -338,7 +400,7 @@ jobs:
 
       - name: Post Playground preview button
         if: env.SKIP != '1'
-        uses: WordPress/action-wp-playground-pr-preview@c8607529dac8d2bf9a1e8493865fc97cd1c3c87b # v2
+        uses: WordPress/action-wp-playground-pr-preview@6a92c0ffc2cdddc4368a807ed79b696aa58eed3e
         with:
           mode: ${{ inputs.mode }}
           blueprint: ${{ steps.blueprint.outputs.blueprint }}

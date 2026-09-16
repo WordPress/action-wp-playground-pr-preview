@@ -204,6 +204,15 @@ const githubLib = require('@actions/github');
   	  ? values[upperKey]
   	  : '';
 
+      // Character references keep PR and repository text from becoming Markdown
+      // or HTML syntax. Encode spaces too, so values cannot indent code blocks.
+      if (/^(PR_|REPO_)/.test(upperKey)) {
+        return value.replace(/[\r\n\t]+/g, ' ').replace(
+          /[\u0020-\u002f\u003a-\u0040\u005b-\u0060\u007b-\u007e]/g,
+          character => `&#${character.charCodeAt(0)};`
+        );
+      }
+
   	// Escape HTML entities somewhat naively to prevent the values leaking
   	// into HTML syntax elements.
 	  if (upperKey !== 'PLAYGROUND_BUTTON') {
@@ -359,7 +368,7 @@ const githubLib = require('@actions/github');
     }
   };
 
-  const performCommentUpdate = async () => {
+  const performCommentUpdate = async (authorId) => {
     const managedBody = `${commentIdentifier}${String.fromCodePoint(10)}${renderedComment.trim()}`;
     const comments = await github.paginate(github.rest.issues.listComments, {
   	owner,
@@ -369,6 +378,7 @@ const githubLib = require('@actions/github');
     });
 
     const existing = comments.find((comment) =>
+      comment.user?.id === authorId &&
   	typeof comment.body === 'string' && comment.body.includes(commentIdentifier)
     );
 
@@ -401,8 +411,13 @@ const githubLib = require('@actions/github');
   if (mode === 'append-to-description') {
     await performDescriptionUpdate();
   } else {
+    // Query the supplied token's account; it may represent an app or a user.
+    const {viewer} = await github.graphql('query { viewer { databaseId } }');
+    if (!Number.isSafeInteger(viewer?.databaseId) || viewer.databaseId < 1) {
+      throw new Error('Could not determine the comment author for github-token.');
+    }
     await removeManagedDescriptionBlock();
-    commentId = String(await performCommentUpdate() || '');
+    commentId = String(await performCommentUpdate(viewer.databaseId) || '');
   }
 
   core.setOutput('mode', mode);
