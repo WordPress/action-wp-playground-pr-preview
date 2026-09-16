@@ -62,6 +62,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - name: Warn about v3
+        shell: bash
+        run: |
+          echo "::warning::WordPress/action-wp-playground-pr-preview v3 is deprecated. Upgrade to v4; for built previews, update both build and publish workflow references. Migration guide: https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3"
+
       - name: Guard against misuse
         # This workflow is privileged. It may only run after an unprivileged
         # pull_request build completed. Do not convert this to a job-level

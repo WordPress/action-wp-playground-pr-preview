@@ -31837,6 +31837,8 @@ var __webpack_exports__ = {};
 const core = __nccwpck_require__(7484);
 const githubLib = __nccwpck_require__(3228);
 
+core.warning('WordPress/action-wp-playground-pr-preview v3 is deprecated. Upgrade to v4; for built previews, update both build and publish workflow references. Migration guide: https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3');
+
 (async () => {
   const context = githubLib.context;
   const githubToken = core.getInput('github-token', {required: false});

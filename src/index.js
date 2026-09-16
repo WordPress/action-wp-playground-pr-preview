@@ -1,6 +1,8 @@
 const core = require('@actions/core');
 const githubLib = require('@actions/github');
 
+core.warning('WordPress/action-wp-playground-pr-preview v3 is deprecated. Upgrade to v4; for built previews, update both build and publish workflow references. Migration guide: https://github.com/WordPress/action-wp-playground-pr-preview/blob/v4/README.md#upgrading-from-v3');
+
 (async () => {
   const context = githubLib.context;
   const githubToken = core.getInput('github-token', {required: false});
