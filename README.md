@@ -116,7 +116,7 @@ jobs:
         npm run build:plugin-zip
 ```
 
-In `artifacts: my-plugin=build/my-plugin.zip`, `my-plugin` is the artifact name and `build/my-plugin.zip` is the ZIP file your `build-command` must create. The ZIP should extract to a plugin slug folder, for example `my-plugin/my-plugin.php`, not just files at the ZIP root. See [Plugin zips must extract to a slug-named folder](#limitations--gotchas) if your preview opens but the plugin is missing.
+In `artifacts: my-plugin=build/my-plugin.zip`, `my-plugin` is the artifact name and `build/my-plugin.zip` is the ZIP file your `build-command` must create. Wrap the files in a stable plugin folder, for example `my-plugin/my-plugin.php`. ZIP-root files can also install, but their directory name may be derived from the PR-specific ZIP filename. See [Use a stable plugin folder inside ZIPs](#limitations--gotchas).
 
 ```yaml
 # .github/workflows/pr-preview-publish.yml
@@ -257,7 +257,7 @@ Choose the Blueprint input based on where the JSON comes from:
 
 See the [Quick start with a build step](#with-a-build-step) above. The reusable workflow handles checkout, optional Node/PHP setup, build, ZIP upload, public URL, Blueprint generation, and button posting.
 
-The most common mistake is producing a ZIP with the wrong shape. WordPress plugin ZIPs should extract to a slug-named folder, such as `my-plugin/my-plugin.php`. If your build command runs `zip -r my-plugin.zip .` from inside the plugin directory, stage the files into a folder first, then zip that folder.
+For predictable plugin paths, wrap the ZIP contents in a stable folder, such as `my-plugin/my-plugin.php`. Files at the ZIP root can install, but WordPress may name their directory after the downloaded ZIP, including its PR number and commit SHA. If your build command runs `zip -r my-plugin.zip .` from inside the plugin directory, stage the files into a folder first, then zip that folder.
 
 ### Monorepo with multiple plugins, all activated together
 
@@ -537,7 +537,7 @@ Checklist for reviewing the LLM's output:
 - Reusable workflow usage appears under `jobs.<job_id>.uses`.
 - Build and publish workflows use the same version, for example `@v3`.
 - Every `artifacts` entry has the form `name=path/to/file.zip`, and the build command creates that exact ZIP path.
-- Plugin ZIPs extract to a slug-named folder, not directly to files at the ZIP root.
+- Plugin ZIPs wrap their files in a stable folder so installed paths do not depend on the PR-specific ZIP filename.
 - The workflow does not use `pull_request_target`.
 
 ---
@@ -716,7 +716,7 @@ Available in `description-template` and `comment-template` strings (case-insensi
 - **Fork PR build output becomes public.** The publish workflow never trusts the zip, but it does upload it to a public release URL so Playground can fetch it. Keep `artifacts-to-keep` low unless you deliberately want longer retention.
 - **Artifact Blueprint templates support only `{{ARTIFACT_URL:<name>}}` substitution.** No conditionals, loops, or other placeholders. For per-PR variable shapes, write the blueprint at build time and use `blueprint-from-artifact: true`. Description and comment templates have their own [template variables](#template-variables).
 - **One zip per `artifacts` entry.** Use multiple entries plus a custom `blueprint:` for multiple plugin/theme zips; the `kind:` shortcut is only for a single zip.
-- **Plugin zips must extract to a slug-named folder.** Package `my-plugin/my-plugin.php`, not `my-plugin.php` at the ZIP root. From the plugin repository root, stage the files before zipping. Exclude the staging and output directories so they are not copied into themselves:
+- **Use a stable plugin folder inside ZIPs.** Package `my-plugin/my-plugin.php` to keep the installed path predictable. ZIP-root files can install too, but their directory name may come from the PR-specific ZIP filename. From the plugin repository root, stage the files before zipping. Exclude the staging and output directories so they are not copied into themselves:
 
   ```bash
   mkdir -p stage/my-plugin build
