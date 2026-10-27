@@ -339,7 +339,7 @@ jobs:
               }
               const name = process.env.FIRST_NAME;
               const step = kind === 'theme' ? 'installTheme' : 'installPlugin';
-              const dataKey = kind === 'theme' ? 'themeZipFile' : 'pluginZipFile';
+              const dataKey = kind === 'theme' ? 'themeData' : 'pluginData';
               blueprint = JSON.stringify({
                 $schema: 'https://playground.wordpress.net/blueprint-schema.json',
                 steps: [{
