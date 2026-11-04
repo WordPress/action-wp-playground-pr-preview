@@ -1,0 +1,216 @@
+<iframe src="https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d3608.011686776471!2d55.5516374!3d25.2701923!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3ef5f5006f14dd8d%3A0x7322e409e6990b7d!2sMarasem%20Al%20Sharq%20Compony!5e0!3m2!1sar!2sae!4v1765226705804!5m2!1sar!2sae" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+<?php
+/**
+ * Template Name: صفحة الخدمات الموحدة
+ * Description: نموذج موحد يعرض قائمة الخدمات ويوفر خريطة موقع مخصصة للخدمات
+ */
+
+get_header();
+
+// تحديد نوع الطلب: عرض الصفحة العادية أو خريطة الموقع
+$is_sitemap_request = isset($_GET['sitemap']) && $_GET['sitemap'] === 'services';
+
+if ($is_sitemap_request) {
+    // إعدادات خريطة الموقع (XML)
+    header('Content-Type: application/xml; charset=utf-8');
+    
+    echo '<?xml version="1.0" encoding="UTF-8"?>';
+    echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+    
+    // جلب جميع الخدمات لخريطة الموقع
+    $services_args = array(
+        'post_type' => 'service',
+        'posts_per_page' => -1,
+        'orderby' => 'date',
+        'order' => 'DESC'
+    );
+    
+    $services_query = new WP_Query($services_args);
+    
+    if ($services_query->have_posts()) {
+        while ($services_query->have_posts()) {
+            $services_query->the_post();
+            $last_modified = get_post_modified_time('Y-m-d', false, get_the_ID());
+            $priority = (is_front_page()) ? '1.0' : '0.8';
+            
+            echo '<url>';
+            echo '<loc>' . esc_url(get_permalink()) . '</loc>';
+            echo '<lastmod>' . $last_modified . '</lastmod>';
+            echo '<changefreq>weekly</changefreq>';
+            echo '<priority>' . $priority . '</priority>';
+            echo '</url>';
+        }
+    }
+    wp_reset_postdata();
+    
+    echo '</urlset>';
+    exit;
+}
+
+// عرض الصفحة العادية للخدمات
+?>
+
+<div class="services-container">
+    <header class="page-header">
+        <h1 class="page-title"><?php the_title(); ?></h1>
+    </header>
+
+    <div class="services-content">
+        <?php
+        if (have_posts()) :
+            while (have_posts()) : the_post();
+                the_content();
+            endwhile;
+        endif;
+        ?>
+    </div>
+
+    <div class="services-list">
+        <?php
+        $services_args = array(
+            'post_type' => 'service',
+            'posts_per_page' => 12,
+            'orderby' => 'menu_order',
+            'order' => 'ASC'
+        );
+        
+        $services_query = new WP_Query($services_args);
+        
+        if ($services_query->have_posts()) :
+        ?>
+            <div class="services-grid">
+                <?php while ($services_query->have_posts()) : $services_query->the_post(); ?>
+                    <div class="service-item">
+                        <article id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
+                            <?php if (has_post_thumbnail()) : ?>
+                                <div class="service-thumbnail">
+                                    <a href="<?php the_permalink(); ?>">
+                                        <?php the_post_thumbnail('medium'); ?>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <div class="service-content">
+                                <h2 class="service-title">
+                                    <a href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+                                </h2>
+                                
+                                <div class="service-excerpt">
+                                    <?php the_excerpt(); ?>
+                                </div>
+                                
+                                <div class="service-link">
+                                    <a href="<?php the_permalink(); ?>" class="button">عرض التفاصيل</a>
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                <?php endwhile; ?>
+            </div>
+            
+            <?php
+            // إضافة رابط لتنزيل خريطة الموقع
+            echo '<div class="sitemap-download">';
+            echo '<a href="' . get_permalink() . '?sitemap=services" class="sitemap-link" download="services-sitemap.xml">';
+            echo '<i class="fas fa-download"></i> تنزيل خريطة الموقع للخدمات';
+            echo '</a>';
+            echo '</div>';
+            
+            wp_reset_postdata();
+        else :
+            echo '<p class="no-services">لا توجد خدمات متاحة حالياً.</p>';
+        endif;
+        ?>
+    </div>
+</div>
+
+<style>
+.services-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    direction: rtl;
+    text-align: right;
+}
+
+.services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 25px;
+    margin-top: 30px;
+}
+
+.service-item {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.3s ease;
+}
+
+.service-item:hover {
+    transform: translateY(-5px);
+}
+
+.service-thumbnail img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+.service-content {
+    padding: 20px;
+}
+
+.service-title {
+    font-size: 1.3em;
+    margin: 0 0 10px 0;
+}
+
+.service-title a {
+    color: #333;
+    text-decoration: none;
+    transition: color 0.3s;
+}
+
+.service-title a:hover {
+    color: #0066cc;
+}
+
+.service-excerpt {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 15px;
+}
+
+.button, .sitemap-link {
+    display: inline-block;
+    background: #0066cc;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
+.button:hover, .sitemap-link:hover {
+    background: #0055aa;
+}
+
+.sitemap-download {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.sitemap-link {
+    background: #f0f0f0;
+    color: #333;
+}
+
+.sitemap-link:hover {
+    background: #e0e0e0;
+}
+</style>
+
+<?php get_footer(); ?>
